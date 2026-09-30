@@ -114,6 +114,11 @@ version = "0.1.0"
 [[package]]
 name = "vft-sender"
 version = "0.1.0"
+dependencies = [
+ "vft-fec",
+ "vft-protocol",
+ "vft-visual",
+]
 
 [[package]]
 name = "vft-testkit"
