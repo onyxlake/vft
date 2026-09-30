@@ -11,3 +11,8 @@ workspace = true
 [dependencies]
 vft-fec.workspace = true
 vft-visual.workspace = true
+
+[dev-dependencies]
+vft-protocol.workspace = true
+vft-sender.workspace = true
+vft-receiver.workspace = true

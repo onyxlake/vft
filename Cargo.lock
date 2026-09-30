@@ -129,6 +129,9 @@ name = "vft-testkit"
 version = "0.1.0"
 dependencies = [
  "vft-fec",
+ "vft-protocol",
+ "vft-receiver",
+ "vft-sender",
  "vft-visual",
 ]
 
