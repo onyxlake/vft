@@ -7,3 +7,7 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+vft-protocol.workspace = true
+vft-fec.workspace = true
