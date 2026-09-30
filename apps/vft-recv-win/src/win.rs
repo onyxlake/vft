@@ -6,7 +6,7 @@ use std::{
     ptr::NonNull,
     time::{Duration, Instant},
 };
-use vft_protocol::{Packet, ProfileId};
+use vft_protocol::{Packet, PacketType, ProfileId};
 use vft_receiver::{Error as ReceiverError, Limits, ReceiverSession};
 use vft_visual::{Error as VisualError, GridConfig, LumaImage, VisualFrame};
 use windows::{
@@ -306,6 +306,8 @@ struct Metrics {
     crc_failures: u64,
     valid_frames: u64,
     unique_frames: u64,
+    source_frames: u64,
+    repair_frames: u64,
 }
 pub fn run() -> AppResult<()> {
     let Some(options) = options()? else {
@@ -356,6 +358,11 @@ pub fn run() -> AppResult<()> {
         match decode(&image, selected) {
             Ok(packet) => {
                 metrics.valid_frames += 1;
+                match packet.kind {
+                    PacketType::SourceSymbol => metrics.source_frames += 1,
+                    PacketType::RepairSymbol => metrics.repair_frames += 1,
+                    _ => {}
+                }
                 let wire = packet.encode()?;
                 if last_packet.as_ref() != Some(&wire) {
                     metrics.unique_frames += 1;
@@ -440,10 +447,11 @@ fn save_stats(
         0.0
     };
     let mut file = File::create(path)?;
-    writeln!(file,"profile,file_bytes,elapsed_seconds,captures,valid_frames,unique_frames,invalid_frames,crc_failures,valid_symbols,duplicate_symbols,dependent_symbols,recovered_bytes,hash_verified,verified_goodput_bytes_per_second,unique_frame_rate,packet_error_rate,fec_overhead")?;
-    writeln!(file,"{profile},{size},{seconds:.6},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6},{overhead:.6}",
+    writeln!(file,"profile,file_bytes,elapsed_seconds,captures,valid_frames,unique_frames,invalid_frames,crc_failures,valid_symbols,duplicate_symbols,dependent_symbols,recovered_bytes,hash_verified,verified_goodput_bytes_per_second,unique_frame_rate,packet_error_rate,fec_overhead,source_frames,repair_frames")?;
+    writeln!(file,"{profile},{size},{seconds:.6},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6},{overhead:.6},{},{}",
         metrics.captures,metrics.valid_frames,metrics.unique_frames,metrics.invalid_frames,metrics.crc_failures,
         p.valid_symbols,p.duplicate_symbols,p.dependent_symbols,p.recovered_bytes,receiver.is_complete(),
-        verified_bytes as f64/seconds,metrics.unique_frames as f64/seconds,metrics.invalid_frames as f64/metrics.captures.max(1) as f64)?;
+        verified_bytes as f64/seconds,metrics.unique_frames as f64/seconds,metrics.invalid_frames as f64/metrics.captures.max(1) as f64,
+        metrics.source_frames,metrics.repair_frames)?;
     Ok(())
 }
