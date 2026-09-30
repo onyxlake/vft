@@ -118,6 +118,10 @@ version = "0.1.0"
 [[package]]
 name = "vft-testkit"
 version = "0.1.0"
+dependencies = [
+ "vft-fec",
+ "vft-visual",
+]
 
 [[package]]
 name = "vft-visual"
