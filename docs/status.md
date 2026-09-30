@@ -18,21 +18,24 @@ Updated 2026-09-30 (Asia/Shanghai). The original scope is preserved in [plan.md]
 | M11 Windows capture | Complete | Physical screen rectangle or known local sender client area, diagnostic BMP |
 | M12 Windows sampling | Complete | Known grid alignment, sync validation, luminance calibration and sampling |
 | M13 local screen E2E | Complete | 1 KiB/1 MiB/100 MiB SHA matches; native repair-only late join and robust 16px test also pass |
-| M14 remote desktop | Not run | Requires an actual remote sender/session; [reproducible procedure](remote-validation.md) provided |
+| M14 remote desktop | SHA-verified E2E pass; benchmark matrix partial | User tested `--auto` remotely: 617,787 bytes, 22.077 s, 27.3 KiB/s; [completion log](benchmarks/remote-auto-user-reported.md). Profile/FPS/configuration and broader matrix remain unreported |
 
 Repository fmt, check, strict clippy and all 25 tests pass on Windows x64 with Rust 1.98.1.
 Release binaries build successfully. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
 
-Phase 1 is **not yet Done**: M14 needs a real remote desktop run and benchmark.
-There is no claim of meeting the remote 40–100 KB/s target. Keyboard/fullscreen behavior is
+Phase 1 now has both local and user-reported real remote SHA-verified E2E evidence, plus a first
+remote goodput record. M14's full FPS/profile benchmark matrix and reproducible configuration
+remain incomplete. The reported remote run is below the 40–100 KB/s target; no claim of meeting
+that target is made. Keyboard/fullscreen behavior is
 implemented and compiled; exhaustive interactive GUI testing is not part of the automated suite.
 
 An additional user-requested desktop locator is implemented: `--auto` discovers a complete
 axis-aligned standard-grid frame using existing sync bands and CRC validation. It reacquires
 after movement/continuous decoding failure without discarding recovery progress. Optional
 `--search-rect` restricts discovery. Synthetic scaling/noise/occlusion/session-selection tests
-and a native 1 MiB transfer with movement and two location locks pass. This does not complete M14.
+and a native 1 MiB transfer with movement and two location locks pass. The user's remote `--auto`
+run also passes SHA verification; remote movement/reacquisition is not yet reported.
 
 Receiver memory remains proportional to object size; default file limit is 256 MiB. Camera
 capture/perspective correction, capture API upgrades and feedback adaptation are deferred.

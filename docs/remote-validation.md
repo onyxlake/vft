@@ -1,8 +1,11 @@
 # Real remote desktop validation
 
-M14 has not been performed: no remote desktop session or remote sender was supplied. Local desktop
-and synthetic transport results must not be reported as RDP/video results. The 40–100 KB/s remote
-goodput target remains an unverified target.
+The user reported a successful real remote desktop `--auto` run on 2026-09-30 and supplied its
+SHA-verified completion log: 617,787 bytes in 22.077 s at 27.3 KiB/s. See the
+[recorded evidence](benchmarks/remote-auto-user-reported.md). Transport product/codec, profile,
+FPS, cell size, display configuration and remote movement tests were not supplied. This first
+remote functional pass is below the 40–100 KB/s target; the complete M14 matrix remains pending.
+Local desktop and synthetic transport results must still be kept separate from remote results.
 
 ## Setup
 
@@ -40,9 +43,10 @@ vft-recv-win.exe --auto --search-rect 0 0 1920 1080 --output recovered.bin
 ```
 
 The locator reads screen pixels, so it also works with a remote sender displayed locally; it does
-not require a local sender HWND. Keep the entire axis-aligned frame visible. Discovery and
-reacquisition have local/synthetic validation only; their real remote codec performance remains
-unmeasured. The benchmark runner above still uses an explicitly recorded manual rectangle.
+not require a local sender HWND. Keep the entire axis-aligned frame visible. Automatic discovery
+has a user-reported SHA-verified remote pass; movement/reacquisition has local/synthetic validation
+and has not yet been reported remotely. The benchmark runner above still uses an explicitly
+recorded manual rectangle.
 
 ## Matrix
 
@@ -89,5 +93,6 @@ does not measure video bitrate or the remote sender's CPU. Collect those with en
 instrumentation and attach the evidence to the run. Do not derive missing frames from the requested
 FPS alone: Windows timers, composition and the codec can repeat or drop frames.
 
-Document successful and failed runs. M14 and Phase 1 Done require real remote SHA-verified E2E,
-benchmark results, and passing repository checks; adding this procedure does not satisfy them.
+Document successful and failed runs. The user-reported run supplies real remote SHA-verified E2E
+evidence and the first payload-goodput result. Complete the broader M14 matrix with configuration
+and metrics recorded above; a single successful run does not establish every profile/FPS case.

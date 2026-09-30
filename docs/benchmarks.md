@@ -2,7 +2,8 @@
 
 Measured 2026-09-30 on Windows x64 (`10.0.26200.0`), Rust 1.98.1, release build, with separate
 native sender/receiver processes and actual screen capture. These are **local desktop** results.
-There is no real RDP/H.264/H.265/AV1 measurement yet.
+The local measurements below remain separate from the later
+[user-reported remote `--auto` result](benchmarks/remote-auto-user-reported.md).
 
 | Input | Profile / requested FPS / cell | Verified time | Verified goodput | Result |
 | --- | --- | --- | --- | --- |
@@ -86,8 +87,21 @@ blank. Small-file timing depends on the packet visible at startup and is not sus
 
 The synthetic suite additionally covers screen-edge placement, both profiles, two-pixel cells,
 fractional independent X/Y scaling, blur/noise/contrast, occlusion, CRC corruption, false patterns,
-and selecting the existing session among multiple senders. No real remote-session locator result
-is claimed.
+and selecting the existing session among multiple senders. A subsequent user-provided remote
+completion log is recorded separately below.
+
+## User-reported remote desktop result
+
+On 2026-09-30 the user reported a successful `--auto` remote desktop test and supplied the
+receiver's `COMPLETE sha256=verified` line. It recovered 617,787 bytes in 22.077 s at 27.3 KiB/s.
+The log reports 654 received packets, 436 duplicate symbols, 127 independent symbols, two
+completed generations and one invalid visual capture. See the
+[exact log and limitations](benchmarks/remote-auto-user-reported.md).
+
+This supplies remote functional E2E evidence. The transport product/codec, profile, FPS, cell
+size, display settings and repeated trials are unknown. Goodput is approximately 28.0 decimal
+KB/s, below the remote 40–100 KB/s target. It does not establish remote movement/reacquisition,
+repair-only joining or the complete benchmark matrix.
 
 Run the native fixtures with:
 
@@ -101,4 +115,5 @@ Run the native fixtures with:
 
 For a repair-only native join, choose `-JoinDelaySeconds` greater than the source transmission time.
 The simulator already tests joining after all sources have passed. Follow [remote validation](remote-validation.md)
-for the 5/10/15/30 FPS × profile/cell-size matrix. That matrix remains unmeasured.
+for the 5/10/15/30 FPS × profile/cell-size matrix. The reported pass does not identify a matrix
+configuration; full matrix coverage remains unrecorded.
