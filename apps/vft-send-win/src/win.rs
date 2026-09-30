@@ -35,6 +35,7 @@ struct Options {
     fps: u32,
     cell_size: usize,
     fullscreen: bool,
+    topmost: bool,
     frames: Option<u64>,
     rect_file: Option<PathBuf>,
     position: (i32, i32),
@@ -42,7 +43,7 @@ struct Options {
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\nESC exits; SPACE pauses; F11 toggles fullscreen.");
+        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\nESC exits; SPACE pauses; F11 toggles fullscreen.");
         return Ok(None);
     }
     let mut out = Options {
@@ -51,6 +52,7 @@ fn options() -> AppResult<Option<Options>> {
         fps: 15,
         cell_size: 0,
         fullscreen: false,
+        topmost: false,
         frames: None,
         rect_file: None,
         position: (40, 40),
@@ -76,6 +78,7 @@ fn options() -> AppResult<Option<Options>> {
             "--fps" => out.fps = value()?.parse()?,
             "--cell-size" => out.cell_size = value()?.parse()?,
             "--fullscreen" => out.fullscreen = true,
+            "--topmost" => out.topmost = true,
             "--frames" => out.frames = Some(value()?.parse()?),
             "--rect-file" => out.rect_file = Some(PathBuf::from(value()?)),
             "--position" => out.position = (value()?.parse()?, value()?.parse()?),
@@ -288,6 +291,17 @@ pub fn run() -> AppResult<()> {
         let _ = ShowWindow(hwnd, SW_SHOW);
         // A launcher may hide the console through STARTUPINFO. The visual channel needs a visible window.
         let _ = ShowWindow(hwnd, SW_SHOW);
+        if app.borrow().options.topmost {
+            SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+            )?;
+        }
         if SetTimer(Some(hwnd), 1, (1000 / fps).max(1), None) == 0 {
             let _ = DestroyWindow(hwnd);
             return Err("SetTimer failed".into());
