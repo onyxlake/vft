@@ -19,5 +19,5 @@ unique-frame rate, CRC rejection, loss, FEC overhead and CPU across FPS/profile 
 Then consider temporal payload layouts, alternative FEC and optional profile requests.
 
 Immediate follow-ups before a broad production release: disk-backed receiver generations,
-automatic screen locator, receiver preview window, explicit Windows manifest/monitor selection,
+receiver preview window, explicit Windows manifest/monitor selection,
 and additional malformed-input/resource-bound testing. These do not replace M14 remote validation.

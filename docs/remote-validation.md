@@ -31,6 +31,19 @@ Coordinates above are examples, not a detected rectangle. The script creates uni
 configuration JSON, a crop preview, receiver logs, receiver CPU/memory statistics, and verified
 payload goodput. It never communicates with the sender or marks an unsuccessful run as verified.
 
+For interactive use without measuring a manual crop, the receiver now supports:
+
+```powershell
+vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp --stats stats.csv
+# Restrict discovery to the local area displaying the remote desktop if needed:
+vft-recv-win.exe --auto --search-rect 0 0 1920 1080 --output recovered.bin
+```
+
+The locator reads screen pixels, so it also works with a remote sender displayed locally; it does
+not require a local sender HWND. Keep the entire axis-aligned frame visible. Discovery and
+reacquisition have local/synthetic validation only; their real remote codec performance remains
+unmeasured. The benchmark runner above still uses an explicitly recorded manual rectangle.
+
 ## Matrix
 
 Run each combination with 1 MiB and 100 MiB fixtures, preferably at least three repetitions:
@@ -66,6 +79,10 @@ is needed. Symbol error rate is not directly observable for CRC-rejected packets
 
 `source_frames` and `repair_frames` count all CRC-valid captures of each packet type, including
 duplicates and arrivals before discovery. A repair-only late-join run must show zero source frames.
+
+`location_scans` and `location_locks` describe automatic discovery/reacquisition. Full search
+screenshots with no detected frame are not included in frame capture/rejection counters, but
+their elapsed time is included in verified goodput. Both counters are zero in manual capture mode.
 
 Record actual unique-frame rate, application CPU seconds, wall duration and peak memory. The script
 does not measure video bitrate or the remote sender's CPU. Collect those with endpoint/transport

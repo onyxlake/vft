@@ -20,7 +20,7 @@ Updated 2026-09-30 (Asia/Shanghai). The original scope is preserved in [plan.md]
 | M13 local screen E2E | Complete | 1 KiB/1 MiB/100 MiB SHA matches; native repair-only late join and robust 16px test also pass |
 | M14 remote desktop | Not run | Requires an actual remote sender/session; [reproducible procedure](remote-validation.md) provided |
 
-Repository fmt, check, strict clippy and all 20 tests pass on Windows x64 with Rust 1.98.1.
+Repository fmt, check, strict clippy and all 25 tests pass on Windows x64 with Rust 1.98.1.
 Release binaries build successfully. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
 
@@ -28,6 +28,12 @@ Phase 1 is **not yet Done**: M14 needs a real remote desktop run and benchmark.
 There is no claim of meeting the remote 40–100 KB/s target. Keyboard/fullscreen behavior is
 implemented and compiled; exhaustive interactive GUI testing is not part of the automated suite.
 
-Receiver memory remains proportional to object size; default file limit is 256 MiB. Full-screen
-automatic localization, camera capture, capture API upgrades and feedback adaptation are deferred.
+An additional user-requested desktop locator is implemented: `--auto` discovers a complete
+axis-aligned standard-grid frame using existing sync bands and CRC validation. It reacquires
+after movement/continuous decoding failure without discarding recovery progress. Optional
+`--search-rect` restricts discovery. Synthetic scaling/noise/occlusion/session-selection tests
+and a native 1 MiB transfer with movement and two location locks pass. This does not complete M14.
+
+Receiver memory remains proportional to object size; default file limit is 256 MiB. Camera
+capture/perspective correction, capture API upgrades and feedback adaptation are deferred.
 The first receiver is a CLI with optional captured BMP preview, not a separate live preview window.

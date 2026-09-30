@@ -5,6 +5,9 @@ use alloc::{vec, vec::Vec};
 use core::fmt;
 use vft_protocol::{Packet, ProfileId, CRC_LEN, HEADER_LEN};
 
+mod locator;
+pub use locator::{locate, LocatedFrame};
+
 const BOOTSTRAP_CELLS: usize = 80;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GridConfig {
@@ -51,7 +54,43 @@ pub struct LumaImage {
     pub height: usize,
     pub pixels: Vec<u8>,
 }
+/// An axis-aligned rectangle in image pixels, excluding surrounding window chrome.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ImageRect {
+    pub x: usize,
+    pub y: usize,
+    pub width: usize,
+    pub height: usize,
+}
+impl ImageRect {
+    fn validate(self, image: &LumaImage) -> Result<(), Error> {
+        if self.width == 0
+            || self.height == 0
+            || self.x > image.width
+            || self.y > image.height
+            || self.width > image.width - self.x
+            || self.height > image.height - self.y
+        {
+            return Err(Error::Dimensions);
+        }
+        Ok(())
+    }
+}
 impl LumaImage {
+    pub fn crop(&self, rect: ImageRect) -> Result<Self, Error> {
+        self.validate()?;
+        rect.validate(self)?;
+        let mut pixels = Vec::with_capacity(rect.width * rect.height);
+        for y in rect.y..rect.y + rect.height {
+            let start = y * self.width + rect.x;
+            pixels.extend_from_slice(&self.pixels[start..start + rect.width]);
+        }
+        Ok(Self {
+            width: rect.width,
+            height: rect.height,
+            pixels,
+        })
+    }
     pub fn validate(&self) -> Result<(), Error> {
         if self.width == 0
             || self.height == 0
@@ -233,9 +272,27 @@ impl VisualFrame {
     }
     /// The image is the exact frame rectangle. Sample nine central points per cell after scaling.
     pub fn sample(image: &LumaImage, grid: GridConfig) -> Result<Self, Error> {
+        Self::sample_rect(
+            image,
+            grid,
+            ImageRect {
+                x: 0,
+                y: 0,
+                width: image.width,
+                height: image.height,
+            },
+        )
+    }
+    /// Sample a subrectangle without allocating a cropped pixel buffer.
+    pub fn sample_rect(
+        image: &LumaImage,
+        grid: GridConfig,
+        rect: ImageRect,
+    ) -> Result<Self, Error> {
         image.validate()?;
+        rect.validate(image)?;
         grid.validate()?;
-        if image.width < grid.columns * 2 || image.height < grid.rows * 2 {
+        if rect.width < grid.columns * 2 || rect.height < grid.rows * 2 {
             return Err(Error::Dimensions);
         }
         let mut cells = vec![0; grid.columns * grid.rows];
@@ -244,8 +301,8 @@ impl VisualFrame {
                 let mut sum = 0u32;
                 for dy in [3, 4, 5] {
                     for dx in [3, 4, 5] {
-                        let px = (x * 8 + dx) * image.width / (grid.columns * 8);
-                        let py = (y * 8 + dy) * image.height / (grid.rows * 8);
+                        let px = rect.x + (x * 8 + dx) * rect.width / (grid.columns * 8);
+                        let py = rect.y + (y * 8 + dy) * rect.height / (grid.rows * 8);
                         sum += u32::from(image.pixels[py * image.width + px]);
                     }
                 }

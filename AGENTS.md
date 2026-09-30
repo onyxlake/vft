@@ -42,7 +42,7 @@ Phase 1 targets Windows 10/11 x64. Additional platforms, camera localization, fe
 - The receiver is currently memory-backed with a default 256 MiB file limit. Preserve input/resource limits and avoid unnecessary full-file copies; do not describe it as bounded-memory streaming recovery.
 - Preserve create-new output semantics for recovered files, statistics and previews. Never silently overwrite existing files.
 - Keep unsafe operations explicit and justified. In Windows adapters, preserve RAII ownership, Win32 callback reentry guards, panic containment at FFI boundaries, and window/state teardown order.
-- Capture coordinates are physical pixels. Preserve DPI awareness, exclude window borders/title bars, and flush GDI before reading captured pixels. The current decoder requires a known frame rectangle; `--preview` saves a diagnostic BMP.
+- Capture coordinates are physical pixels. Preserve DPI awareness, exclude window borders/title bars, and flush GDI before reading captured pixels. The sampler requires an exact rectangle; `--auto` supplies it through sync/CRC-validated discovery and reacquires the selected session after movement. `--preview` saves a diagnostic crop BMP.
 
 ## Verification
 

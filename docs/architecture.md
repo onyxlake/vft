@@ -38,8 +38,13 @@ Requested FPS is a timer target, not a guarantee of unique screen frames.
 The Windows receiver uses `GetDC`, a reusable compatible DC and top-down `CreateDIBSection`,
 `BitBlt`, then `GdiFlush` before reading the pixel buffer. GDI resources are restored/released by
 RAII. Per-monitor-v2 DPI awareness keeps capture coordinates in physical pixels. It can follow
-the local sender's client region or capture a manually supplied rectangle. `--preview` saves one
-BMP for crop diagnostics. Output uses create-new semantics after core SHA verification.
+the local sender's client region, capture a manually supplied rectangle, or visually locate a
+frame using `--auto`. Automatic discovery captures the virtual desktop (or `--search-rect`), runs
+the platform-neutral locator, then switches to the CRC-validated crop and releases the large
+discovery DIB. Continuous decoding failure for 750 ms triggers reacquisition while keeping the
+receiver session and recovered generations. Full-desktop searches are paced to a 500 ms minimum
+iteration interval. `--preview` saves one BMP of the first captured/located frame for crop
+diagnostics. Output uses create-new semantics after core SHA verification.
 
 API references: [StretchDIBits and bitmap functions](https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-functions),
 [DPI awareness](https://learn.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process),
@@ -49,7 +54,8 @@ API references: [StretchDIBits and bitmap functions](https://learn.microsoft.com
 
 1. Protocol golden vectors and malformed-packet checks.
 2. FEC deterministic golden symbols, loss, duplicate, reorder and repair-only recovery.
-3. Visual codec round trips at capacity, calibration and malformed dimensions.
+3. Visual codec round trips at capacity, calibration and malformed dimensions; desktop location,
+   movement, fractional scaling, noise, occlusion and session selection.
 4. Seeded transport: frame drop, duplicate, cell corruption, bilinear resize, box blur,
    brightness, contrast, noise and batch reorder.
 5. End-to-end byte equality and SHA-256 through both profiles and late joining; 1 MiB visual test.

@@ -60,10 +60,43 @@ It adds CPU/memory counters to new runs; some initial runs predate receiver CPU 
 `scripts/remote-benchmark.ps1` records receiver CPU and memory plus separately supplied transport
 configuration. It does not invent unknown video bitrate, codec, sender CPU, or frame-loss numbers.
 
+## Automatic location and capture-mode regression
+
+Additional local release runs validate the new visual locator, with independent input/output
+SHA-256 comparisons. These are functionality checks, not repeated throughput benchmarks:
+
+| Capture mode | Input / profile | Verified time | Location scans / locks | Result |
+| --- | --- | --- | --- | --- |
+| `--auto`, sender moved after 3 s | 1 MiB / balanced / 60 FPS / 4 px | 9.687 s | 2 / 2 | Reacquired, SHA match |
+| `--auto` | 1 KiB / robust / 10 FPS / 16 px | 0.153 s | 1 / 1 | Located, SHA match |
+| `--sender-window` | 1 KiB / balanced / 60 FPS / 4 px | 0.739 s | 0 / 0 | SHA match |
+| `--sender-window` | 1 MiB / balanced / 60 FPS / 4 px | 9.207 s | 0 / 0 | SHA match |
+| `--rect` | 1 MiB / balanced / 60 FPS / 4 px | 9.634 s | 0 / 0 | SHA match |
+
+The movement run first located `49 78 768 432`, then `234 188 768 432`; 47 captures were rejected
+while the old crop was invalid. Recovery progress survived reacquisition. The native script uses
+the sender rectangle file only for test readiness/recording; the `--auto` receiver receives no
+sender coordinates or HWND. Robust auto discovery also succeeds at the original 1536 × 864 size.
+
+Records are in [capture-modes-windows.csv](benchmarks/capture-modes-windows.csv). `capture_region`
+is the sender's final recorded client region, so the movement run's first location is in its log.
+Search scans with no detected frame are separate from capture rejection counters. Small runs
+can finish between the one-second process-memory polls; their unknown receiver peak memory is
+blank. Small-file timing depends on the packet visible at startup and is not sustained goodput.
+
+The synthetic suite additionally covers screen-edge placement, both profiles, two-pixel cells,
+fractional independent X/Y scaling, blur/noise/contrast, occlusion, CRC corruption, false patterns,
+and selecting the existing session among multiple senders. No real remote-session locator result
+is claimed.
+
 Run the native fixtures with:
 
 ```powershell
 ./scripts/local-e2e.ps1 -Sizes 1024,1048576,104857600 -Fps 60 -CellSize 4
+# Auto discovery followed by moving only the test-owned sender window:
+./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -AutoLocate -MoveSender
+# Manual rectangle regression, obtained by the test harness from the sender:
+./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -ManualRect
 ```
 
 For a repair-only native join, choose `-JoinDelaySeconds` greater than the source transmission time.

@@ -8,7 +8,7 @@ use std::{
 };
 use vft_protocol::{Packet, PacketType, ProfileId};
 use vft_receiver::{Error as ReceiverError, Limits, ReceiverSession};
-use vft_visual::{Error as VisualError, GridConfig, LumaImage, VisualFrame};
+use vft_visual::{locate, Error as VisualError, GridConfig, LumaImage, VisualFrame};
 use windows::{
     core::w,
     Win32::{
@@ -43,6 +43,8 @@ impl Region {
 struct Options {
     rect: Option<Region>,
     sender_window: bool,
+    auto: bool,
+    search_rect: Option<Region>,
     output: PathBuf,
     profile: Option<ProfileId>,
     fps: u32,
@@ -53,13 +55,18 @@ struct Options {
 }
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    parse_options(&args)
+}
+fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
-        println!("vft-recv-win --rect X Y WIDTH HEIGHT --output FILE [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\nUse --sender-window instead of --rect for a local VFT sender window. The capture rectangle must contain only the entire visual frame.");
+        println!("vft-recv-win (--auto | --rect X Y WIDTH HEIGHT | --sender-window) --output FILE\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
         return Ok(None);
     }
     let mut out = Options {
         rect: None,
         sender_window: false,
+        auto: false,
+        search_rect: None,
         output: PathBuf::new(),
         profile: None,
         fps: 30,
@@ -78,18 +85,22 @@ fn options() -> AppResult<Option<Options>> {
             Ok(v)
         };
         match arg.as_str() {
-            "--rect" => {
-                out.rect = Some(
-                    Region {
-                        x: value()?.parse()?,
-                        y: value()?.parse()?,
-                        width: value()?.parse()?,
-                        height: value()?.parse()?,
-                    }
-                    .validate()?,
-                )
+            "--rect" | "--search-rect" => {
+                let region = Region {
+                    x: value()?.parse()?,
+                    y: value()?.parse()?,
+                    width: value()?.parse()?,
+                    height: value()?.parse()?,
+                }
+                .validate()?;
+                if arg == "--rect" {
+                    out.rect = Some(region);
+                } else {
+                    out.search_rect = Some(region);
+                }
             }
             "--sender-window" => out.sender_window = true,
+            "--auto" => out.auto = true,
             "--output" => out.output = PathBuf::from(value()?),
             "--profile" => {
                 out.profile = match value()? {
@@ -108,12 +119,14 @@ fn options() -> AppResult<Option<Options>> {
         }
     }
     if out.output.as_os_str().is_empty()
-        || out.rect.is_some() == out.sender_window
+        || usize::from(out.rect.is_some()) + usize::from(out.sender_window) + usize::from(out.auto)
+            != 1
+        || (out.search_rect.is_some() && !out.auto)
         || !(1..=120).contains(&out.fps)
         || out.timeout == 0
     {
         return Err(
-            "supply --output and exactly one capture source, FPS 1..120 and positive timeout"
+            "supply --output and exactly one of --auto/--rect/--sender-window, FPS 1..120 and positive timeout; --search-rect requires --auto"
                 .into(),
         );
     }
@@ -132,6 +145,19 @@ fn options() -> AppResult<Option<Options>> {
         return Err("output, stats and preview paths must differ".into());
     }
     Ok(Some(out))
+}
+
+fn desktop_region() -> AppResult<Region> {
+    // Virtual desktop origin can be negative when a monitor is left/above the primary.
+    unsafe {
+        Region {
+            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+            width: GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            height: GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        }
+        .validate()
+    }
 }
 
 fn local_region() -> AppResult<Region> {
@@ -313,6 +339,8 @@ struct Metrics {
     unique_frames: u64,
     source_frames: u64,
     repair_frames: u64,
+    location_scans: u64,
+    location_locks: u64,
 }
 pub fn run() -> AppResult<()> {
     let Some(options) = options()? else {
@@ -328,6 +356,8 @@ pub fn run() -> AppResult<()> {
     let start = Instant::now();
     let mut last_report = start;
     let mut capture: Option<Capture> = None;
+    let mut search_capture: Option<Capture> = None;
+    let mut failures_since: Option<Instant> = None;
     let mut selected = options.profile;
     let mut metrics = Metrics::default();
     let mut last_packet = None;
@@ -344,15 +374,81 @@ pub fn run() -> AppResult<()> {
             )
             .into());
         }
-        let region = if options.sender_window {
-            local_region()?
-        } else {
-            options.rect.ok_or("missing region")?
-        };
-        if capture.as_ref().is_none_or(|c| c.region != region) {
+        let (image, decoded) = if options.auto && capture.is_none() {
+            let search_region = match options.search_rect {
+                Some(region) => region,
+                None => desktop_region()?,
+            };
+            if search_capture
+                .as_ref()
+                .is_none_or(|c| c.region != search_region)
+            {
+                search_capture = Some(Capture::new(search_region)?);
+            }
+            let desktop = search_capture
+                .as_ref()
+                .ok_or("missing search capture")?
+                .grab()?;
+            metrics.location_scans += 1;
+            let identity = receiver.manifest().map(|m| (m.session, m.object));
+            let found = locate(&desktop, selected, |packet| {
+                identity.is_none_or(|id| (packet.session, packet.object) == id)
+            })?;
+            let Some(found) = found else {
+                if last_report.elapsed() >= Duration::from_secs(1) {
+                    println!(
+                        "Searching for visible VFT frame; scans={} progress={:?}",
+                        metrics.location_scans,
+                        receiver.progress()
+                    );
+                    last_report = Instant::now();
+                }
+                // Full desktop discovery is throttled independently of locked capture FPS.
+                std::thread::sleep(Duration::from_millis(500).saturating_sub(iteration.elapsed()));
+                continue;
+            };
+            let region = Region {
+                x: search_region.x + found.rect.x as i32,
+                y: search_region.y + found.rect.y as i32,
+                width: found.rect.width as i32,
+                height: found.rect.height as i32,
+            }
+            .validate()?;
             capture = Some(Capture::new(region)?);
-        }
-        let image = capture.as_ref().ok_or("missing capture")?.grab()?;
+            // Discovery needs a large DIB only while searching; release it once locked.
+            search_capture = None;
+            failures_since = None;
+            metrics.location_locks += 1;
+            println!(
+                "LOCATED rect={} {} {} {} profile={:?}",
+                region.x, region.y, region.width, region.height, found.packet.profile
+            );
+            (desktop.crop(found.rect)?, Ok(found.packet))
+        } else {
+            if !options.auto {
+                let region = if options.sender_window {
+                    local_region()?
+                } else {
+                    options.rect.ok_or("missing region")?
+                };
+                if capture.as_ref().is_none_or(|c| c.region != region) {
+                    capture = Some(Capture::new(region)?);
+                }
+            }
+            let image = capture.as_ref().ok_or("missing capture")?.grab()?;
+            let decoded = decode(&image, selected).and_then(|packet| {
+                if options.auto
+                    && receiver
+                        .manifest()
+                        .is_some_and(|m| packet.session != m.session || packet.object != m.object)
+                {
+                    Err(VisualError::Metadata)
+                } else {
+                    Ok(packet)
+                }
+            });
+            (image, decoded)
+        };
         metrics.captures += 1;
         if !preview_saved {
             if let Some(path) = &options.preview {
@@ -360,8 +456,9 @@ pub fn run() -> AppResult<()> {
             }
             preview_saved = true;
         }
-        match decode(&image, selected) {
+        match decoded {
             Ok(packet) => {
+                failures_since = None;
                 metrics.valid_frames += 1;
                 match packet.kind {
                     PacketType::SourceSymbol => metrics.source_frames += 1,
@@ -398,6 +495,14 @@ pub fn run() -> AppResult<()> {
                 metrics.invalid_frames += 1;
                 if matches!(error, VisualError::Protocol(vft_protocol::Error::Crc)) {
                     metrics.crc_failures += 1;
+                }
+                if options.auto
+                    && failures_since.get_or_insert_with(Instant::now).elapsed()
+                        >= Duration::from_millis(750)
+                {
+                    capture = None;
+                    failures_since = None;
+                    println!("Lost VFT frame; restarting desktop search");
                 }
             }
         }
@@ -452,18 +557,65 @@ fn save_stats(
         0.0
     };
     let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
-    writeln!(file,"profile,file_bytes,elapsed_seconds,captures,valid_frames,unique_frames,invalid_frames,crc_failures,valid_symbols,duplicate_symbols,dependent_symbols,recovered_bytes,hash_verified,verified_goodput_bytes_per_second,unique_frame_rate,packet_error_rate,fec_overhead,source_frames,repair_frames")?;
-    writeln!(file,"{profile},{size},{seconds:.6},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6},{overhead:.6},{},{}",
+    writeln!(file,"profile,file_bytes,elapsed_seconds,captures,valid_frames,unique_frames,invalid_frames,crc_failures,valid_symbols,duplicate_symbols,dependent_symbols,recovered_bytes,hash_verified,verified_goodput_bytes_per_second,unique_frame_rate,packet_error_rate,fec_overhead,source_frames,repair_frames,location_scans,location_locks")?;
+    writeln!(file,"{profile},{size},{seconds:.6},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6},{overhead:.6},{},{},{},{}",
         metrics.captures,metrics.valid_frames,metrics.unique_frames,metrics.invalid_frames,metrics.crc_failures,
         p.valid_symbols,p.duplicate_symbols,p.dependent_symbols,p.recovered_bytes,receiver.is_complete(),
         verified_bytes as f64/seconds,metrics.unique_frames as f64/seconds,metrics.invalid_frames as f64/metrics.captures.max(1) as f64,
-        metrics.source_frames,metrics.repair_frames)?;
+        metrics.source_frames,metrics.repair_frames,metrics.location_scans,metrics.location_locks)?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn auto_capture_options_are_exclusive_and_search_is_optional() {
+        let output = std::env::temp_dir().join(format!(
+            "vft-options-{}-{}.bin",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let output = output.to_string_lossy();
+        let parse =
+            |args: &[&str]| parse_options(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let options = parse(&["--auto", "--output", &output]).unwrap().unwrap();
+        assert!(options.auto && options.search_rect.is_none());
+        let options = parse(&[
+            "--auto",
+            "--search-rect",
+            "-200",
+            "0",
+            "800",
+            "600",
+            "--output",
+            &output,
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(options.search_rect.unwrap().x, -200);
+        for args in [
+            vec!["--auto", "--sender-window", "--output", &output],
+            vec![
+                "--auto", "--rect", "0", "0", "800", "600", "--output", &output,
+            ],
+            vec![
+                "--sender-window",
+                "--search-rect",
+                "0",
+                "0",
+                "800",
+                "600",
+                "--output",
+                &output,
+            ],
+        ] {
+            assert!(parse(&args).is_err());
+        }
+    }
     #[test]
     fn statistics_cannot_overwrite_a_recovered_file() {
         let nonce = std::time::SystemTime::now()
@@ -482,6 +634,8 @@ mod tests {
         let options = Options {
             rect: None,
             sender_window: true,
+            auto: false,
+            search_rect: None,
             output: path.clone(),
             profile: None,
             fps: 30,

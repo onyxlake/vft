@@ -1,8 +1,8 @@
 # Luminance frame v0
 
 Each frame contains an independent packet; decoding does not require arrival order or previous
-pixels. The capture source supplies the exact frame rectangle. Arbitrary screen location and
-perspective correction are outside this phase.
+pixels. The sampler consumes an exact frame rectangle. It can be supplied manually or by the
+axis-aligned desktop locator described below. Perspective correction remains unsupported.
 
 Default lattices:
 
@@ -42,8 +42,29 @@ per cell. Rotated frames, wrong crops, occlusion and strong compression can caus
 Calibration levels must be increasing by at least 25 luminance units. Binary uses the midpoint of
 the darkest/brightest patches; balanced selects the closest calibrated level. Sync mismatches must
 be at most 5%. Bootstrap magic/reserved/profile/length must validate, then the packet CRC must pass.
-CRC failures are discarded and recovered with FEC. Sync is a validation check inside a known
-rectangle, not a full-screen locator.
+CRC failures are discarded and recovered with FEC.
+
+## Desktop location
+
+`vft_visual::locate` searches a luminance image for the existing v0 sync bands. It scans every
+second image row, finds the regular white runs of the top sync band, and estimates horizontal
+origin/width for each standard lattice. The inverse bottom band supplies vertical bounds, so
+horizontal and vertical scales can differ. No wire-format change or sender-window metadata is
+needed.
+
+Each candidate must pass the full calibration, sync, bootstrap and packet CRC checks. A caller
+predicate can reject other session/object identities during reacquisition. The scan examines at
+most 128 distinct candidate geometries per image, and image dimensions remain limited to 8192.
+Search uses a row-wide black/white threshold and requires at least 75 luminance units of sync
+contrast. Severe compression, low contrast, interrupted stripes, partial occlusion or clutter
+can prevent discovery; a restricted search area or manual crop is available as a fallback.
+
+`VisualFrame::sample_rect` samples a rectangle within a larger image without copying its pixels.
+The Windows `--auto` adapter searches the virtual desktop, including negative monitor origins,
+or an optional `--search-rect`. Once found it captures only that region. After 750 ms without a
+valid packet from the selected session it resumes discovery, retaining recovered generations.
+Unsuccessful discovery scans are counted separately from rejected frame captures. Rotation and
+perspective are not supported; the entire frame must be visible with at least two pixels per cell.
 
 Stable borders, large uniform cells and luminance coding are intentional. The payload still changes
 between frames, and temporal codec performance needs real RDP/H.264/H.265/AV1 measurements.
