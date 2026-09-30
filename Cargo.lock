@@ -122,3 +122,6 @@ version = "0.1.0"
 [[package]]
 name = "vft-visual"
 version = "0.1.0"
+dependencies = [
+ "vft-protocol",
+]
