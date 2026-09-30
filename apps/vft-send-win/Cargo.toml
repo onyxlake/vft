@@ -7,3 +7,11 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+vft-protocol.workspace = true
+vft-sender.workspace = true
+vft-visual.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
