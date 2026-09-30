@@ -20,6 +20,17 @@ use windows::{
 };
 
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
+struct WindowGuard(HWND);
+impl Drop for WindowGuard {
+    fn drop(&mut self) {
+        // The guard is declared after App and closes the window before its user-data pointer expires.
+        unsafe {
+            if IsWindow(Some(self.0)).as_bool() {
+                let _ = DestroyWindow(self.0);
+            }
+        }
+    }
+}
 struct FileSource(File);
 impl ObjectSource for FileSource {
     fn read_exact_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<(), String> {
@@ -282,6 +293,7 @@ pub fn run() -> AppResult<()> {
             Some(instance),
             Some((&*app as *const RefCell<App>).cast::<c_void>()),
         )?;
+        let _window_guard = WindowGuard(hwnd);
         if fullscreen {
             if let Err(error) = toggle_fullscreen(hwnd, &mut app.borrow_mut()) {
                 let _ = DestroyWindow(hwnd);
