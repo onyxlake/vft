@@ -145,6 +145,12 @@ dependencies = [
 [[package]]
 name = "vft-recv-win"
 version = "0.1.0"
+dependencies = [
+ "vft-protocol",
+ "vft-receiver",
+ "vft-visual",
+ "windows",
+]
 
 [[package]]
 name = "vft-send-win"

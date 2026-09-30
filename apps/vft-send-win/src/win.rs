@@ -286,6 +286,8 @@ pub fn run() -> AppResult<()> {
             }
         }
         let _ = ShowWindow(hwnd, SW_SHOW);
+        // A launcher may hide the console through STARTUPINFO. The visual channel needs a visible window.
+        let _ = ShowWindow(hwnd, SW_SHOW);
         if SetTimer(Some(hwnd), 1, (1000 / fps).max(1), None) == 0 {
             let _ = DestroyWindow(hwnd);
             return Err("SetTimer failed".into());
