@@ -1,6 +1,6 @@
 use std::{
     ffi::c_void,
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::Write,
     path::PathBuf,
     ptr::NonNull,
@@ -119,6 +119,11 @@ fn options() -> AppResult<Option<Options>> {
     }
     if out.output.exists() {
         return Err("output already exists; refusing to overwrite".into());
+    }
+    if out.stats.as_ref().is_some_and(|p| p.exists())
+        || out.preview.as_ref().is_some_and(|p| p.exists())
+    {
+        return Err("stats or preview already exists; choose a new path".into());
     }
     if out.stats.as_ref() == Some(&out.output)
         || out.preview.as_ref() == Some(&out.output)
@@ -446,7 +451,7 @@ fn save_stats(
     } else {
         0.0
     };
-    let mut file = File::create(path)?;
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     writeln!(file,"profile,file_bytes,elapsed_seconds,captures,valid_frames,unique_frames,invalid_frames,crc_failures,valid_symbols,duplicate_symbols,dependent_symbols,recovered_bytes,hash_verified,verified_goodput_bytes_per_second,unique_frame_rate,packet_error_rate,fec_overhead,source_frames,repair_frames")?;
     writeln!(file,"{profile},{size},{seconds:.6},{},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.6},{overhead:.6},{},{}",
         metrics.captures,metrics.valid_frames,metrics.unique_frames,metrics.invalid_frames,metrics.crc_failures,
@@ -454,4 +459,45 @@ fn save_stats(
         verified_bytes as f64/seconds,metrics.unique_frames as f64/seconds,metrics.invalid_frames as f64/metrics.captures.max(1) as f64,
         metrics.source_frames,metrics.repair_frames)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn statistics_cannot_overwrite_a_recovered_file() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("vft-stats-{}-{nonce}.bin", std::process::id()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(b"verified file bytes").unwrap();
+        drop(file);
+        let options = Options {
+            rect: None,
+            sender_window: true,
+            output: path.clone(),
+            profile: None,
+            fps: 30,
+            timeout: 1,
+            stats: Some(path.clone()),
+            preview: None,
+            max_file_size: 1,
+        };
+        let result = save_stats(
+            &options,
+            &ReceiverSession::default(),
+            &Metrics::default(),
+            Duration::from_secs(1),
+        );
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"verified file bytes");
+        std::fs::remove_file(path).unwrap();
+    }
 }
