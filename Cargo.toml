@@ -1,0 +1,29 @@
+[workspace]
+members = ["crates/*", "apps/*"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.dependencies]
+vft-protocol = { path = "crates/vft-protocol" }
+vft-fec = { path = "crates/vft-fec" }
+vft-visual = { path = "crates/vft-visual" }
+vft-sender = { path = "crates/vft-sender" }
+vft-receiver = { path = "crates/vft-receiver" }
+vft-testkit = { path = "crates/vft-testkit" }
+sha2 = { version = "0.10", default-features = false }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_HiDpi"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.release]
+lto = "thin"
+
