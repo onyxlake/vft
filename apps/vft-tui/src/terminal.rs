@@ -17,7 +17,7 @@ use ratatui::{
 };
 use std::{
     collections::BTreeSet,
-    io::{self, Stdout},
+    io::{self, Stdout, Write},
     sync::mpsc::{SyncSender, TrySendError},
     time::Duration,
 };
@@ -299,6 +299,27 @@ pub fn sender_ui(
     }
     Ok(())
 }
+fn update_request_panel(
+    request: &RequestSnapshot,
+    identity: &mut String,
+    page: &mut usize,
+    scroll: &mut u16,
+) -> bool {
+    // Timestamp formatting can coincide for queued requests; the frozen code carries
+    // the fresh request ID and is the snapshot identity.
+    let next = request.codes.first().cloned().unwrap_or_default();
+    let changed = next != *identity;
+    if changed {
+        *identity = next;
+        *page = 0;
+        *scroll = 0;
+    }
+    *page = (*page).min(request.codes.len().saturating_sub(1));
+    changed
+}
+fn copy_text(request: &RequestSnapshot, page: usize) -> String {
+    format!("Frozen progress snapshot at {}.\r\nCopy view does not pause capture/recovery.\r\nRequest page {} / {}\r\nGroups / rank deficits:\r\n{}\r\nFull request code (terminal wrapping only):\r\n{}\r\nTab: return to TUI  Left/Right: page  R: refresh  Q / Ctrl+C: quit\r\n",safe_text(&request.generated),page+1,request.codes.len(),request.entries.get(page).map_or("",String::as_str),request.codes.get(page).map_or("",String::as_str))
+}
 pub fn receiver_ui(
     shared: SharedView,
     cancel: Stop,
@@ -312,15 +333,15 @@ pub fn receiver_ui(
     let mut code_page = 0usize;
     let mut scroll = 0u16;
     let mut generation = String::new();
+    let mut copying = false;
+    let mut printed = None;
+    let mut copy_completion = None;
     loop {
         let v = shared.lock().unwrap().clone();
         cursor = cursor.min(v.groups.len().saturating_sub(1));
         if let Some(request) = &v.request {
-            if request.generated != generation {
-                generation = request.generated.clone();
+            if update_request_panel(request, &mut generation, &mut code_page, &mut scroll) {
                 panel = true;
-                code_page = 0;
-                scroll = 0;
             }
         }
         let body = if panel {
@@ -350,7 +371,27 @@ pub fn receiver_ui(
             }
             text
         };
-        screen.terminal.draw(|f|draw(f,&v,body,if panel {"Tab: table  Left/Right: request page  Up/Down/PgUp/PgDn: scroll\nR: refresh  Q / Ctrl+C: quit"} else {"R: request  Arrows: navigate  Space: select  A: page  C: clear\nPgUp/PgDn: page  Tab: request/table  Q / Ctrl+C: quit"},&notice,scroll))?;
+        if copying {
+            if printed.as_ref() != Some(&(generation.clone(), code_page)) {
+                if let Some(request) = &v.request {
+                    // Main screen output wraps naturally and has no per-row TUI borders.
+                    // It stays still for manual selection; the capture worker keeps running.
+                    let mut output = io::stdout();
+                    write!(output, "\r\n{}", copy_text(request, code_page))?;
+                    output.flush()?;
+                    printed = Some((generation.clone(), code_page));
+                    copy_completion = None;
+                }
+            }
+            if v.worker_done && copy_completion.as_ref() != Some(&v.result) {
+                let mut output = io::stdout();
+                write!(output, "\r\n{:?}: {}\r\n", v.state, safe_text(&v.result))?;
+                output.flush()?;
+                copy_completion = Some(v.result.clone());
+            }
+        } else {
+            screen.terminal.draw(|f|draw(f,&v,body,if panel {"Tab: table  P: copy view  Left/Right: request page  Up/Down: scroll\nR: refresh  Q / Ctrl+C: quit"} else {"R: request  Arrows: navigate  Space: select  A: page  C: clear\nPgUp/PgDn: page  Tab: request/table  Q / Ctrl+C: quit"},&notice,scroll))?;
+        }
         if let Some(Event::Key(k)) = next_event()? {
             if k.kind == KeyEventKind::Release {
                 continue;
@@ -362,18 +403,31 @@ pub fn receiver_ui(
             let cmd = match k.code {
                 KeyCode::Char('r' | 'R') => Some(ReceiverCommand::Generate(selected.clone())),
                 KeyCode::Tab => {
-                    panel = !panel;
+                    if copying {
+                        execute!(io::stdout(), EnterAlternateScreen, Hide)?;
+                        screen.terminal.clear()?;
+                        copying = false;
+                        panel = true;
+                    } else {
+                        panel = !panel;
+                    }
                     scroll = 0;
                     None
                 }
-                KeyCode::Left if panel => {
+                KeyCode::Char('p' | 'P') if v.request.is_some() => {
+                    execute!(io::stdout(), LeaveAlternateScreen, Show)?;
+                    copying = true;
+                    printed = None;
+                    None
+                }
+                KeyCode::Left if panel || copying => {
                     code_page = code_page.saturating_sub(1);
                     scroll = 0;
                     None
                 }
-                KeyCode::Right if panel => {
+                KeyCode::Right if panel || copying => {
                     if let Some(r) = &v.request {
-                        code_page = (code_page + 1).min(r.codes.len() - 1);
+                        code_page = (code_page + 1).min(r.codes.len().saturating_sub(1));
                     }
                     scroll = 0;
                     None
@@ -438,6 +492,63 @@ pub fn receiver_ui(
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+    #[test]
+    fn fresh_request_with_same_timestamp_resets_shrunken_pages() {
+        let old = RequestSnapshot {
+            generated: String::from("same millisecond"),
+            codes: vec![String::from("old-id-code"), String::from("second-page")],
+            ..Default::default()
+        };
+        let new = RequestSnapshot {
+            generated: old.generated.clone(),
+            codes: vec![String::from("fresh-id-code")],
+            ..Default::default()
+        };
+        let mut identity = String::new();
+        let mut page = 0;
+        let mut scroll = 0;
+        assert!(update_request_panel(
+            &old,
+            &mut identity,
+            &mut page,
+            &mut scroll
+        ));
+        page = 1;
+        scroll = 20;
+        assert!(update_request_panel(
+            &new,
+            &mut identity,
+            &mut page,
+            &mut scroll
+        ));
+        assert_eq!(page, 0);
+        assert_eq!(scroll, 0);
+        assert!(!update_request_panel(
+            &new,
+            &mut identity,
+            &mut page,
+            &mut scroll
+        ));
+    }
+    #[test]
+    fn long_copy_view_keeps_canonical_code_on_one_logical_line() {
+        let code = format!(
+            "VFR1/TAG/ID/{}/CRC",
+            (1..=256)
+                .map(|g| format!("{g}:1"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let snapshot = RequestSnapshot {
+            codes: vec![code.clone()],
+            entries: vec![String::from("groups")],
+            generated: String::from("now"),
+        };
+        let text = copy_text(&snapshot, 0);
+        assert!(text.split("\r\n").any(|line| line == code));
+        assert!(!text.contains(['│', '┌', '┘']));
+        assert!(text.contains("does not pause capture/recovery"));
+    }
     #[test]
     fn queue_busy_and_ended_results_are_visible_errors() {
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
