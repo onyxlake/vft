@@ -111,3 +111,12 @@ Full codes never fall back to simple parsing. Limits are 4096 input bytes, 256 e
 
 The independently derived manifest-v0 vector produces tag `89BF47CBF57E2AAB` and request
 `VFR1/89BF47CBF57E2AAB/0123456789ABCDEF/1:1/BC78F06C`. The existing binary wire format is unchanged.
+
+Manual scheduling uses one active budget and a common monotonic repair-index allocator per group.
+Automatic position stays independent: cancellation drops only unsent budget, and sources resume
+at their original cursor. Manifests keep priority at the global interval. Manual groups rotate
+after at most eight packets; each 32 manual data packets yields one ordinary data packet.
+The recent 64 full request IDs make equal repeated requests no-ops and reject conflicting content.
+Manual cursor metadata is allocated lazily, capped at 8 MiB including request history. Refusal
+leaves automatic transmission available. Read/encode failure preserves scheduling and budgets;
+generation-load/read-byte counters expose the cost of retaining only one generation cache.
