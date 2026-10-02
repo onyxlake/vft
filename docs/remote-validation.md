@@ -5,7 +5,18 @@ SHA-verified completion log: 617,787 bytes in 22.077 s at 27.3 KiB/s. See the
 [recorded evidence](benchmarks/remote-auto-user-reported.md). Transport product/codec, profile,
 FPS, cell size, display configuration and remote movement tests were not supplied. This first
 remote functional pass is below the 40–100 KB/s target; the complete M14 matrix remains pending.
+An independently executed [Hyper-V RDP lab record](benchmarks/remote-rdp-lab-20261002.md)
+now adds 1 MiB FPS/profile cases, gateway rate/delay/loss controls, repair-only joining and an
+independently verified 100 MiB transfer. The latter took 3499.663 s at 29.3 KiB/s, below the
+sustained target; the full matrix and repeat runs remain pending.
 Local desktop and synthetic transport results must still be kept separate from remote results.
+
+For a fresh Windows VM without the VC++ runtime, the lab used a sender built with
+`RUSTFLAGS='-C target-feature=+crt-static'` in a separate target directory. Record this build
+choice and executable hash; it does not change the wire format or repository build defaults.
+Keep Windows activation overlays and other occlusion outside the full visual frame. In the lab,
+a fullscreen crop decoded manifests but rejected populated data frames under the activation
+watermark; a smaller window outside the overlay passed.
 
 ## Setup
 
@@ -45,8 +56,9 @@ vft-recv-win.exe --auto --search-rect 0 0 1920 1080 --output recovered.bin
 The locator reads screen pixels, so it also works with a remote sender displayed locally; it does
 not require a local sender HWND. Keep the entire axis-aligned frame visible. Automatic discovery
 has a user-reported SHA-verified remote pass; movement/reacquisition has local/synthetic validation
-and has not yet been reported remotely. The benchmark runner above still uses an explicitly
-recorded manual rectangle.
+and has not yet been deliberately tested remotely. The lab recorded same-rectangle reacquisition
+after a transient interruption during its 100 MiB run; its cause was uncontrolled. The benchmark
+runner above still uses an explicitly recorded manual rectangle.
 
 ## Matrix
 

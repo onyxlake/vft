@@ -3,7 +3,8 @@
 Measured 2026-09-30 on Windows x64 (`10.0.26200.0`), Rust 1.98.1, release build, with separate
 native sender/receiver processes and actual screen capture. These are **local desktop** results.
 The local measurements below remain separate from the later
-[user-reported remote `--auto` result](benchmarks/remote-auto-user-reported.md).
+[user-reported remote `--auto` result](benchmarks/remote-auto-user-reported.md) and the
+[controlled real RDP lab results](benchmarks/remote-rdp-lab-20261002.md).
 
 | Input | Profile / requested FPS / cell | Verified time | Verified goodput | Result |
 | --- | --- | --- | --- | --- |
