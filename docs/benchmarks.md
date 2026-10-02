@@ -1,5 +1,9 @@
 # Measurements
 
+Browser sender implementation evidence is recorded separately in
+[WASM sender validation](benchmarks/wasm-sender-20261002.md): compiled WASM/native SHA-verified
+recovery, bounded-read/memory observations and browser UI checks. These are not remote goodput results.
+
 Measured 2026-09-30 on Windows x64 (`10.0.26200.0`), Rust 1.98.1, release build, with separate
 native sender/receiver processes and actual screen capture. These are **local desktop** results.
 The local measurements below remain separate from the later

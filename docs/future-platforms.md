@@ -1,14 +1,16 @@
 # Future platforms and scope
 
-Current implementations: shared Rust libraries and Windows 10/11 x64 applications only.
-No Linux, Android, WASM, encryption, multi-file archive, ARQ, network transport, plugin system,
+Current implementations: shared Rust libraries, Windows 10/11 x64 applications, and the
+user-requested [browser WASM sender](wasm-sender.md).
+No native Linux/Android adapter, WASM receiver, encryption, multi-file archive, ARQ, network transport, plugin system,
 GPU acceleration, QR/JAB compatibility, or full RaptorQ implementation is included.
 
 Public cores accept bytes, random-access input and normalized luminance grids; platform adapters
 can be added without changing the wire format or importing Windows APIs into shared crates.
 
 - Linux sender: winit + softbuffer; receiver: PipeWire/Wayland and X11 fallback.
-- WASM sender (higher priority): Browser File API adapter and Canvas presentation.
+- WASM sender: implemented with a Worker FileReaderSync adapter and Canvas presentation;
+  browser-to-Windows screen capture and real RDP acceptance remain to be recorded.
 - WASM receiver: experimental camera/VideoFrame sampling.
 - Android receiver: Kotlin/CameraX Y plane through JNI into the existing Rust sampling/receiver.
 - Optional remote filesystem feedback: DONE, progress or profile request. Absence of this feedback

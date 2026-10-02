@@ -4,7 +4,7 @@ Updated 2026-10-02 (Asia/Shanghai). The original scope is preserved in [plan.md]
 
 | Milestone | Status | Evidence |
 | --- | --- | --- |
-| M0 workspace | Complete | Eight workspace members, format/lint setup and local Git checkpoints |
+| M0 workspace | Complete | Nine workspace members including the requested browser adapter, format/lint setup and local Git checkpoints |
 | M1 protocol v0 | Complete | Packet/manifest serialization, CRC32C, independent golden vectors |
 | M2 block model | Complete | 64-symbol generations, zero padding, streaming random-access sender source |
 | M3 deterministic FEC | Complete | Systematic/dense repair encoding; loss, duplicate, reorder, repair-only tests |
@@ -19,9 +19,11 @@ Updated 2026-10-02 (Asia/Shanghai). The original scope is preserved in [plan.md]
 | M12 Windows sampling | Complete | Known grid alignment, sync validation, luminance calibration and sampling |
 | M13 local screen E2E | Complete | 1 KiB/1 MiB/100 MiB SHA matches; native repair-only late join and robust 16px test also pass |
 | M14 remote desktop | SHA-verified 1 MiB/100 MiB E2E; benchmark matrix partial | [Real RDP gateway lab](benchmarks/remote-rdp-lab-20261002.md): 9/10 windowed 1 MiB cases pass across baseline and netem conditions; repair-only joining passes; 100 MiB passes in 3499.663 s at 29.3 KiB/s. Earlier [user-reported pass](benchmarks/remote-auto-user-reported.md) is retained |
+| Requested WASM sender extension | Implemented; headless compatibility and browser UI checked | Worker bounded FileReaderSync reads, streaming SHA-256, existing core/Canvas, profiles/FPS/DPI/fullscreen/pause; [WASM/native E2E and browser evidence](benchmarks/wasm-sender-20261002.md). Browser-to-Windows physical capture and browser real RDP acceptance remain |
 
-Repository fmt, check, strict clippy and all 25 tests pass on Windows x64 with Rust 1.98.1.
-Release binaries build successfully. Five shared libraries use `no_std + alloc` and have also
+Repository fmt, check, strict clippy and all 27 tests pass on Windows x64 with Rust 1.98.1.
+Release binaries and the WASM sender build successfully. The browser adapter also passes native
+check and a release WASM build with the declared minimum Rust 1.85.0. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
 
 Phase 1 has local, user-reported remote and independently executed real RDP SHA-verified evidence.

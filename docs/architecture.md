@@ -6,6 +6,7 @@ protocol ← fec
   visual ← sender
     ↑       ↑
     └── Windows sender (file source, SHA-256 scan, Win32/DIB)
+    └── WASM sender (Worker FileReaderSync source, SHA-256 scan, Canvas)
 
 protocol + fec → receiver
 visual + receiver → Windows receiver (physical screen rectangle, GDI capture, file output)
@@ -19,7 +20,13 @@ Windows APIs are target-specific dependencies of the two applications.
 
 Sender input implements `ObjectSource::read_exact_at`. The Windows adapter keeps an open file,
 hashes it in 64 KiB chunks, and seeks on demand. Encoder caching retains only one 64-symbol
-generation (about 305 KiB for balanced), plus frame buffers. The file must remain unchanged for
+generation (about 305 KiB for balanced), plus frame buffers. The browser adapter supplies the same
+random-access trait from a dedicated Worker using FileReaderSync on bounded File/Blob slices.
+It hashes in 64 KiB chunks, transfers one logical frame at a time to the main thread, and renders
+it through nearest-neighbor Canvas scaling with physical-pixel/DPI sizing. Pause/hidden-page handling
+keeps the current session; stop terminates the Worker. Its small scalar WASM ABI requires no new
+binding dependencies. See [wasm-sender.md](wasm-sender.md) for build, lifecycle and ABI contracts.
+The file must remain unchanged for
 the transfer. No ACK, completion feedback or shared filesystem is required by either core.
 
 Receiver FEC uses one lazily allocated decoder per incomplete generation. Completed generation

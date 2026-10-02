@@ -153,6 +153,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vft-send-web"
+version = "0.1.0"
+dependencies = [
+ "vft-protocol",
+ "vft-receiver",
+ "vft-sender",
+ "vft-visual",
+]
+
+[[package]]
 name = "vft-send-win"
 version = "0.1.0"
 dependencies = [

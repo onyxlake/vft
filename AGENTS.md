@@ -24,12 +24,15 @@ VFT transfers files through independent visual frames over a simplex channel. Su
 | `crates/vft-testkit` | Seeded simulation and headless integration tooling |
 | `apps/vft-send-win` | File adapter, CLI and native Win32/GDI presentation |
 | `apps/vft-recv-win` | Physical screen capture, CLI, diagnostics and verified file output |
+| `apps/vft-send-web` | WASM adapter, bounded Worker File API source and physical-pixel Canvas presentation |
 
 The five protocol/FEC/visual/sender/receiver libraries are `no_std + alloc`. Keep filesystem, OS, capture and UI APIs in adapters. `vft-testkit` may use `std`. Keep Windows dependencies target-specific.
 
 Respect the workspace's declared Rust version and edition in `Cargo.toml`. A successful build on a newer compiler does not establish minimum-version compatibility. Avoid adding dependencies or platform requirements without a concrete need.
 
 Phase 1 targets Windows 10/11 x64. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [docs/future-platforms.md](docs/future-platforms.md) before changing portability boundaries.
+
+The user-requested WASM sender is now included. Keep file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
 
 ## Correctness requirements
 
@@ -77,6 +80,8 @@ For application or native integration changes, build release binaries and run th
 cargo build --release --workspace
 ./scripts/local-e2e.ps1 -Sizes 1024,1048576 -Fps 60 -CellSize 4
 ```
+
+For browser sender changes, additionally run `./scripts/check-web.ps1` (Rust WASM target and Node.js 22+) and check the relevant browser UI behavior. Its WASM/native headless recovery does not establish browser-to-Windows physical capture or real remote acceptance. Generated static files stay under ignored `output/web-sender/`.
 
 Choose additional cases according to the change, including robust mode, repair-only joining or the 100 MiB case when needed. Large screen transfers take many minutes and are not routine documentation checks. Native tests need an unlocked interactive Windows desktop with capture access and a visible sender. Use `--topmost` when occlusion would invalidate the run.
 

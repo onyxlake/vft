@@ -1,0 +1,20 @@
+[package]
+name = "vft-send-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+vft-protocol.workspace = true
+vft-sender.workspace = true
+vft-visual.workspace = true
+
+[dev-dependencies]
+vft-receiver.workspace = true

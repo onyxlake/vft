@@ -1,7 +1,8 @@
 # VFT — Visual File Transfer
 
-Simplex file transfer over independent luminance frames. Rust shared libraries and native Windows
-sender/receiver; no network transport or required acknowledgements. See [the implementation plan](docs/plan.md).
+Simplex file transfer over independent luminance frames. Rust shared libraries, native Windows
+sender/receiver and a browser WASM sender; no network transport or required acknowledgements.
+See [the implementation plan](docs/plan.md).
 
 Build and validate:
 
@@ -14,7 +15,8 @@ cargo test --workspace
 
 The six crates implement protocol v0, deterministic FEC, calibrated binary/four-level visual
 frames, simplex sender/receiver cores and a seeded distortion simulator. The two Windows apps use
-Win32/GDI with software framebuffers and desktop region capture. Shared cores are `no_std + alloc`.
+Win32/GDI with software framebuffers and desktop region capture. The browser adapter reuses the
+sender and visual cores in a Worker and displays frames on Canvas. Shared cores are `no_std + alloc`.
 
 ```powershell
 cargo build --release --workspace
@@ -57,6 +59,29 @@ Keep the sender visible and the source file unchanged. The receiver refuses to o
 An unlocked interactive Windows desktop is required for capture. Sender reads files in bounded
 chunks; the initial receiver retains recovered data in memory, with a 256 MiB default limit.
 No direct network connection, acknowledgements or feedback files are required.
+
+Browser sender (build tools are needed only to create the static distribution):
+
+```powershell
+rustup target add wasm32-unknown-unknown
+./scripts/build-web.ps1
+python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
+# Open http://127.0.0.1:18780 in Edge, Chrome or Firefox; select a file and start sending.
+# On the receiving Windows desktop:
+./target/release/vft-recv-win.exe --auto --output recovered.bin
+```
+
+Use HTTP on localhost or HTTPS when hosting the generated static files; opening `index.html`
+through `file://` does not support module Workers. No file bytes are uploaded. The browser hashes
+in 64 KiB slices and reads symbols on demand. Choose balanced/robust, FPS and physical pixels per
+cell, then keep the full Canvas visible; fullscreen provides more room. Small windows reduce
+cell size to fit (minimum 2 physical pixels). Hiding the tab pauses transmission; return and click
+Continue. Stop sending after the receiver reports SHA-verified completion.
+
+See [browser sender details and validation](docs/wasm-sender.md). With Node.js 22+ installed,
+`./scripts/check-web.ps1` additionally verifies the compiled WASM against the native decoder,
+including loss, duplicates, reordering and repair-only joining. This is separate from browser
+screen capture and real remote desktop acceptance.
 
 See [protocol](docs/protocol.md), [visual format](docs/visual-format.md), [architecture](docs/architecture.md),
 [milestone status](docs/status.md), [benchmarks](docs/benchmarks.md),
