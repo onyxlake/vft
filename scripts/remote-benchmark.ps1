@@ -28,7 +28,7 @@ $configuration = [ordered]@{
     captured_at_utc = [DateTime]::UtcNow.ToString('o')
 }
 $configuration | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $run 'configuration.json') -Encoding utf8
-$argsForReceiver = @('--rect',"$X","$Y","$Width","$Height",'--profile',$Profile,'--output',('"' + $outputPath + '"'),'--fps','120','--timeout',"$TimeoutSeconds",'--stats',('"' + $statsPath + '"'),'--preview',('"' + $previewPath + '"'))
+$argsForReceiver = @('--rect',"$X","$Y","$Width","$Height",'--no-tui','--profile',$Profile,'--output',('"' + $outputPath + '"'),'--fps','120','--timeout',"$TimeoutSeconds",'--stats',('"' + $statsPath + '"'),'--preview',('"' + $previewPath + '"'))
 $receiver = Start-Process -FilePath $receiverExe -ArgumentList $argsForReceiver -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $run 'receiver.log') -RedirectStandardError (Join-Path $run 'receiver.err')
 $cpu = 0.0
 $peak = 0L

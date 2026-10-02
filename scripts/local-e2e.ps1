@@ -58,7 +58,7 @@ foreach ($size in $Sizes) {
     $receiverPeak = 0L
     $moved = $false
     try {
-        $sendArgs = @(('"' + $inputPath + '"'),'--profile',$Profile,'--fps',"$Fps",'--cell-size',"$CellSize",'--topmost','--rect-file',('"' + $rectPath + '"'))
+        $sendArgs = @(('"' + $inputPath + '"'),'--no-tui','--profile',$Profile,'--fps',"$Fps",'--cell-size',"$CellSize",'--topmost','--rect-file',('"' + $rectPath + '"'))
         $sender = Start-Process -FilePath $sendExe -ArgumentList $sendArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $run "$size-sender.log") -RedirectStandardError (Join-Path $run "$size-sender.err")
         $readyDeadline = [DateTime]::UtcNow.AddSeconds(15)
         while (-not (Test-Path -LiteralPath $rectPath)) {
@@ -70,7 +70,7 @@ foreach ($size in $Sizes) {
         $captureMode = if ($AutoLocate) { '--auto' } elseif ($ManualRect) { '--rect' } else { '--sender-window' }
         $captureArgs = @($captureMode)
         if ($ManualRect) { $captureArgs += (Get-Content -LiteralPath $rectPath -Raw).Trim() -split '\s+' }
-        $recvArgs = $captureArgs + @('--output',('"' + $outputPath + '"'),'--fps','120','--timeout',"$TimeoutSeconds",'--stats',('"' + $statsPath + '"'),'--preview',('"' + (Join-Path $run "$size-preview.bmp") + '"'))
+        $recvArgs = $captureArgs + @('--no-tui','--output',('"' + $outputPath + '"'),'--fps','120','--timeout',"$TimeoutSeconds",'--stats',('"' + $statsPath + '"'),'--preview',('"' + (Join-Path $run "$size-preview.bmp") + '"'))
         $receiver = Start-Process -FilePath $recvExe -ArgumentList $recvArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $run "$size-receiver.log") -RedirectStandardError (Join-Path $run "$size-receiver.err")
         $receiveStart = [DateTime]::UtcNow
         while (-not $receiver.WaitForExit(1000)) {

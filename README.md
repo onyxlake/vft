@@ -4,6 +4,10 @@ Simplex file transfer over independent luminance frames. Rust shared libraries, 
 sender/receiver and a browser WASM sender; no network transport or required acknowledgements.
 See [the implementation plan](docs/plan.md).
 
+Windows controls now support [manual repair requests and TUI](docs/manual-repair-tui-plan.md).
+Interactive stdin/stdout default to the English TUI; `--no-tui` forces ordinary CLI for scripts.
+Explicit `--tui` requires interactive stdin and stdout. The visual transport stays in its own window.
+
 Build and validate:
 
 ```powershell
@@ -49,11 +53,36 @@ Manual `--rect X Y WIDTH HEIGHT` remains available: it must contain only the com
 fullscreen. Robust defaults to 16-pixel binary cells; balanced uses 8-pixel four-level cells.
 Keep the sender visible and the source file unchanged. The receiver refuses to overwrite output.
 
+In the receiver TUI, use Up/Down and PgUp/PgDn to inspect incomplete groups (numbers start at 1).
+Space selects a group, A selects the page, and C clears selection. R freezes a request snapshot
+for selected groups, or all incomplete groups if none are selected. Capture continues while you
+read it. Tab switches between table and request; Left/Right switch request-code pages, and
+Up/Down or PgUp/PgDn scroll frozen text. R generates a fresh snapshot; each code has at most
+256 targets. P opens a copy view that prints the full code on one logical line with terminal
+wrapping; capture continues and Tab returns to the TUI. Manually select/copy the code or transcribe
+groups to the sender; clipboard sharing is optional.
+
+In the sender TUI, R opens the input editor. Enter validates and previews; Enter again applies.
+Examples: `18,42,90-91` sends sixteen new repairs per group; `18:3,42:1` describes rank deficits
+and computes a repair budget. Full `VFR1/...` codes check the current manifest tag and CRC, and
+repeated accepted IDs are no-ops. Check the file and tag when using simple lists. One manual batch
+can be active at a time; X cancels its unsent budget. Automatic transmission continues between
+manual batches. Space pauses/resumes, Q or Ctrl+C exits; while editing, shortcuts are text and
+Esc closes the editor. The visual window's ESC/SPACE/F11 controls still work.
+
+Use at least an 80x24 terminal (100x28 provides more space) outside the visible frame. Verified
+receiver completion remains visible until Q, including the output path; ordinary CLI still exits
+automatically. `Manual repair batch sent` means only that packets were sent. Manual feedback
+remains optional and recovery still works without it. [Local validation and remaining acceptance
+work](docs/benchmarks/manual-repair-tui-20261002.md) do not establish remote performance improvement.
+
 ```powershell
 # Native screen tests; creates unique fixtures/logs under output/ and closes its own processes.
 ./scripts/local-e2e.ps1 -Sizes 1024,1048576,104857600 -Fps 60 -CellSize 4
 # Auto-discovery and movement/reacquisition test:
 ./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -AutoLocate -MoveSender
+# Redirected CLI / explicit TUI mode probes:
+./scripts/check-tui-cli.ps1
 ```
 
 An unlocked interactive Windows desktop is required for capture. Sender reads files in bounded

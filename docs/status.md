@@ -4,7 +4,7 @@ Updated 2026-10-02 (Asia/Shanghai). The original scope is preserved in [plan.md]
 
 | Milestone | Status | Evidence |
 | --- | --- | --- |
-| M0 workspace | Complete | Nine workspace members including the requested browser adapter, format/lint setup and local Git checkpoints |
+| M0 workspace | Complete | Ten workspace members including the browser adapter and shared TUI helper, format/lint setup and local Git checkpoints |
 | M1 protocol v0 | Complete | Packet/manifest serialization, CRC32C, independent golden vectors |
 | M2 block model | Complete | 64-symbol generations, zero padding, streaming random-access sender source |
 | M3 deterministic FEC | Complete | Systematic/dense repair encoding; loss, duplicate, reorder, repair-only tests |
@@ -20,8 +20,9 @@ Updated 2026-10-02 (Asia/Shanghai). The original scope is preserved in [plan.md]
 | M13 local screen E2E | Complete | 1 KiB/1 MiB/100 MiB SHA matches; native repair-only late join and robust 16px test also pass |
 | M14 remote desktop | SHA-verified 1 MiB/100 MiB E2E; benchmark matrix partial | [Real RDP gateway lab](benchmarks/remote-rdp-lab-20261002.md): 9/10 windowed 1 MiB cases pass across baseline and netem conditions; repair-only joining passes; 100 MiB passes in 3499.663 s at 29.3 KiB/s. Earlier [user-reported pass](benchmarks/remote-auto-user-reported.md) is retained |
 | Requested WASM sender extension | Implemented; headless compatibility and browser UI checked | Worker bounded FileReaderSync reads, streaming SHA-256, existing core/Canvas, profiles/FPS/DPI/fullscreen/pause; [WASM/native E2E and browser evidence](benchmarks/wasm-sender-20261002.md). Browser-to-Windows physical capture and browser real RDP acceptance remain |
+| Manual repair / Windows TUI extension | Implemented; core, buffer, ConPTY and local screen checks; remote acceptance pending | VFR1 independent vector, generation progress, fair targeted scheduling, default English terminal controls and `--no-tui`; [local evidence and remaining checks](benchmarks/manual-repair-tui-20261002.md) |
 
-Repository fmt, check, strict clippy and all 27 tests pass on Windows x64 with Rust 1.98.1.
+Repository fmt, check, strict clippy and workspace tests pass on Windows x64 with Rust 1.98.1.
 Release binaries and the WASM sender build successfully. The browser adapter also passes native
 check and a release WASM build with the declared minimum Rust 1.85.0. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
@@ -45,4 +46,9 @@ transient interruption and retained recovery progress; deliberate remote movemen
 
 Receiver memory remains proportional to object size; default file limit is 256 MiB. Camera
 capture/perspective correction, capture API upgrades and feedback adaptation are deferred.
-The first receiver is a CLI with optional captured BMP preview, not a separate live preview window.
+The receiver offers a default interactive TUI or ordinary CLI, with optional captured BMP preview;
+there is no separate live image preview window. Both Windows TUI adapters and the locked workspace
+check with Rust 1.85. Manual input keeps packet/FEC/visual formats unchanged, uses bounded metadata
+and a one-generation sender cache, and never requires feedback. Real RDP manual-operation timings,
+the 1280x720 two-window layout, Windows Terminal/traditional console comparison and exhaustive
+resize/paste/error interaction acceptance remain to be recorded. Existing M14 limitations remain.

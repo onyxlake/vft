@@ -1,5 +1,8 @@
 # VFT — Visual File Transfer
 
+用户请求的后续增补：[人工补包与 Windows TUI 实施计划](manual-repair-tui-plan.md)
+（2026-10-02，已实现核心和 Windows TUI；本地验证已记录，真实远程人工操作验收待完成）。原始里程碑与验收记录保持不变。
+
 ## 1. 项目目标
 
 VFT 是一个以 Rust 为核心实现的单向视觉文件传输协议与工具集。

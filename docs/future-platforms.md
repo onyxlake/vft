@@ -14,7 +14,13 @@ can be added without changing the wire format or importing Windows APIs into sha
 - WASM receiver: experimental camera/VideoFrame sampling.
 - Android receiver: Kotlin/CameraX Y plane through JNI into the existing Rust sampling/receiver.
 - Optional remote filesystem feedback: DONE, progress or profile request. Absence of this feedback
-  must continue to support complete transfers. No side channel is currently implemented.
+  must continue to support complete transfers. No automated side channel is currently implemented.
+
+Optional human feedback is now supported by the Windows terminal controls: users copy group
+lists or manifest-bound VFR1 request codes to the sender. The shared parser and targeted scheduler
+remain portable; terminal dependencies and OS random IDs are adapter-only. The browser sender
+continues to use automatic scheduling; browser manual-request UI is deferred. No clipboard,
+shared filesystem or network feedback is required.
 
 Profile adaptation must follow real codec benchmarks. First measure verified payload goodput,
 unique-frame rate, CRC rejection, loss, FEC overhead and CPU across FPS/profile combinations.
