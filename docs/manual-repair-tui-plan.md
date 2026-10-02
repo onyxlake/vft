@@ -235,13 +235,13 @@ P1–P5 已落实；仅按已执行的检查更新状态，剩余人工/远程�
 
 ```powershell
 cargo fmt --all
-./scripts/check.ps1
+python scripts/check.py
 git diff --check
 cargo check -p vft-protocol -p vft-fec -p vft-visual -p vft-sender -p vft-receiver --no-default-features
 cargo +1.85.0 check --workspace --locked
 cargo build --release --workspace
-./scripts/local-e2e.ps1 -Sizes 1024,1048576 -Fps 60 -CellSize 4
-./scripts/check-web.ps1
+python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4
+python scripts/check-web.py
 ```
 
 ### 桌面和真实远程

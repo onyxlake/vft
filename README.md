@@ -8,13 +8,15 @@ Windows controls now support [manual repair requests and TUI](docs/manual-repair
 Interactive stdin/stdout default to the English TUI; `--no-tui` forces ordinary CLI for scripts.
 Explicit `--tui` requires interactive stdin and stdout. The visual transport stays in its own window.
 
-Build and validate:
+Development scripts require Python 3.9+ and the Rust toolchain, with no Python packages to install.
+Use `python` on Windows or `python3` on Linux if `python` is unavailable. Commands work from any
+working directory. Workspace and browser checks run on both systems; native desktop checks require
+Windows 10/11 and an unlocked interactive desktop. See [development scripts](docs/development.md).
+
+Build and validate on Windows or Linux:
 
 ```powershell
-cargo fmt --all -- --check
-cargo check --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+python scripts/check.py
 ```
 
 The six crates implement protocol v0, deterministic FEC, calibrated binary/four-level visual
@@ -78,11 +80,11 @@ work](docs/benchmarks/manual-repair-tui-20261002.md) do not establish remote per
 
 ```powershell
 # Native screen tests; creates unique fixtures/logs under output/ and closes its own processes.
-./scripts/local-e2e.ps1 -Sizes 1024,1048576,104857600 -Fps 60 -CellSize 4
+python scripts/local-e2e.py --sizes 1024 1048576 104857600 --fps 60 --cell-size 4
 # Auto-discovery and movement/reacquisition test:
-./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -AutoLocate -MoveSender
+python scripts/local-e2e.py --sizes 1048576 --fps 60 --cell-size 4 --auto-locate --move-sender
 # Redirected CLI / explicit TUI mode probes:
-./scripts/check-tui-cli.ps1
+python scripts/check-tui-cli.py
 ```
 
 An unlocked interactive Windows desktop is required for capture. Sender reads files in bounded
@@ -93,7 +95,7 @@ Browser sender (build tools are needed only to create the static distribution):
 
 ```powershell
 rustup target add wasm32-unknown-unknown
-./scripts/build-web.ps1
+python scripts/build-web.py
 python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
 # Open http://127.0.0.1:18780 in Edge, Chrome or Firefox; select a file and start sending.
 # On the receiving Windows desktop:
@@ -108,7 +110,7 @@ cell size to fit (minimum 2 physical pixels). Hiding the tab pauses transmission
 Continue. Stop sending after the receiver reports SHA-verified completion.
 
 See [browser sender details and validation](docs/wasm-sender.md). With Node.js 22+ installed,
-`./scripts/check-web.ps1` additionally verifies the compiled WASM against the native decoder,
+`python scripts/check-web.py` additionally verifies the compiled WASM against the native decoder,
 including loss, duplicates, reordering and repair-only joining. This is separate from browser
 screen capture and real remote desktop acceptance.
 

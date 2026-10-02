@@ -7,11 +7,11 @@ The existing Windows receiver can use `--auto` or an exact physical-pixel `--rec
 
 ## Build and use
 
-From the repository root in PowerShell:
+From the repository root on Windows or Linux (Python 3.9+; use `python3` if needed):
 
 ```powershell
 rustup target add wasm32-unknown-unknown
-./scripts/build-web.ps1
+python scripts/build-web.py
 python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
 ```
 
@@ -47,8 +47,9 @@ HTTP server (localhost for local use) or an HTTPS static host. No runtime packag
 server upload endpoint, shared filesystem or connection between sender and receiver is required.
 The page fetches its own JavaScript and WASM when starting a session. Starting another session
 requires those assets to remain accessible; offline asset caching is not implemented. `file://`
-is unsupported because of module loading/Worker restrictions. The build requires Rust and its
-WASM target; Python is just one optional static server, and Node is only needed for development tests.
+is unsupported because of module loading/Worker restrictions. The build requires Rust, its WASM
+target and Python 3.9+ for the build script; Node is only needed for development tests. Python also
+provides an optional static server.
 
 ## Adapter and ABI
 
@@ -95,12 +96,12 @@ API references: [W3C File API](https://www.w3.org/TR/FileAPI/),
 ## Verification
 
 ```powershell
-./scripts/check.ps1
-./scripts/check-web.ps1 # Requires Node.js 22+, plus the WASM Rust target.
+python scripts/check.py
+python scripts/check-web.py # Requires Node.js 22+, plus the WASM Rust target.
 ```
 
 The host adapter tests verify bounded scans, random reads, metadata/source failure handling and
-both-profile SHA-verified recovery. `check-web.ps1` builds the actual release WASM, lints its WASM
+both-profile SHA-verified recovery. `check-web.py` builds the actual release WASM, lints its WASM
 module, checks JS syntax, and invokes it through the production JS bridge in Node. Compiled WASM
 cells are rendered and sampled by the native visual library and recovered by the native receiver.
 The helper independently compares SHA-256 and all bytes with the original test fixture. Empty,

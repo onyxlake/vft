@@ -1,4 +1,4 @@
-// No npm dependencies. Run after build-web.ps1 and building the native verify-frames example.
+// No npm dependencies. Run after build-web.py and building the native verify-frames example.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";

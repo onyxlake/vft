@@ -27,6 +27,13 @@ Release binaries and the WASM sender build successfully. The browser adapter als
 check and a release WASM build with the declared minimum Rust 1.85.0. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
 
+The six PowerShell development workflows have been replaced by dependency-free Python 3.9+
+scripts. Workspace and compiled WASM/native recovery checks pass on Windows and Arch Linux under
+WSL; script regressions also pass on Ubuntu. The Python native harness passes local 1 KiB/1 MiB,
+movement/reacquisition, robust manual-crop, empty-file and repair-only joining cases, six redirected
+TUI probes and a local benchmark-launcher smoke test. See [development commands and validation](development.md).
+Desktop capture tools remain Windows-only. This migration adds no new remote acceptance evidence.
+
 Phase 1 has local, user-reported remote and independently executed real RDP SHA-verified evidence.
 The lab records topology, executable/source hashes, actual capture rectangles, CPU/memory and
 gateway rate/delay/loss settings. Baseline 1 MiB balanced runs reach 52.0 KiB/s, but the sustained

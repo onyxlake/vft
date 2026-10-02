@@ -49,15 +49,15 @@ The user-requested WASM sender is now included. Keep file reads and hashing boun
 
 ## Verification
 
-Run from the repository root in PowerShell:
+Run from the repository root on Windows or Linux with Python 3.9+ (`python3` if needed):
 
 ```powershell
 cargo fmt --all
-./scripts/check.ps1
+python scripts/check.py
 git diff --check
 ```
 
-The check script stops at the first failure and runs:
+The check script first runs Python script regressions, then stops at the first failure in:
 
 ```powershell
 cargo fmt --all -- --check
@@ -78,10 +78,10 @@ For application or native integration changes, build release binaries and run th
 
 ```powershell
 cargo build --release --workspace
-./scripts/local-e2e.ps1 -Sizes 1024,1048576 -Fps 60 -CellSize 4
+python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4
 ```
 
-For browser sender changes, additionally run `./scripts/check-web.ps1` (Rust WASM target and Node.js 22+) and check the relevant browser UI behavior. Its WASM/native headless recovery does not establish browser-to-Windows physical capture or real remote acceptance. Generated static files stay under ignored `output/web-sender/`.
+For browser sender changes, additionally run `python scripts/check-web.py` (Rust WASM target and Node.js 22+) and check the relevant browser UI behavior. Its WASM/native headless recovery does not establish browser-to-Windows physical capture or real remote acceptance. Generated static files stay under ignored `output/web-sender/`.
 
 Choose additional cases according to the change, including robust mode, repair-only joining or the 100 MiB case when needed. Large screen transfers take many minutes and are not routine documentation checks. Native tests need an unlocked interactive Windows desktop with capture access and a visible sender. Use `--topmost` when occlusion would invalidate the run.
 
@@ -108,6 +108,6 @@ The accepted plan authorizes automatic local checkpoint commits after validation
 
 Do not automatically push, force-push, rebase remote branches, reset unrelated user work, or run `git clean -fdx`. Do not change global Git configuration to work around an execution environment issue.
 
-In PowerShell scripts, fail on errors and inspect native command exit codes. Start background helpers with `-WindowStyle Hidden`; application windows needed for visual transfer must still be visible. Stop only processes started by the current run. Use `-LiteralPath` for file operations and verify recursive removal/move targets stay inside the intended directory.
+Development scripts use Python's standard library and fail on subprocess errors. Pass command arguments as lists without a shell. Hide Windows background-helper startup windows; application windows needed for visual transfer must still be visible. Stop only processes started by the current run. Preserve create-new evidence files, and verify recursive removal/move targets stay inside the intended directory. See [docs/development.md](docs/development.md) for platform boundaries and command options.
 
 When finishing, state what changed, which checks ran, and any remaining limitations. Include the local checkpoint commit when created. Never equate implemented code, compiled code, local validation and remote acceptance.

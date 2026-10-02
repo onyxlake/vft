@@ -49,8 +49,10 @@ Exact successful source hashes:
 
 Raw local runs are generated under ignored `output/local-*`: original fixture, recovered file,
 SHA-verified result CSV, sender/receiver logs, capture rectangle and diagnostic BMP. Fixtures use
-`.NET Random(20260930)` filled in 64 KiB chunks. Retain original hashes when reproducing on another
-.NET runtime because fixture generation is test tooling, not a protocol contract.
+`.NET Random(20260930)` filled in 64 KiB chunks in the historical PowerShell harness. The Python
+replacement uses different deterministic fixtures; see [development scripts](development.md).
+Retain original hashes when reproducing on another .NET runtime because fixture generation
+is test tooling, not a protocol contract.
 
 Observed environmental failures were retained, not counted as successful transfers:
 
@@ -63,7 +65,7 @@ Observed environmental failures were retained, not counted as successful transfe
 
 The local test script closes only the processes it starts and refuses to overwrite recovered output.
 It adds CPU/memory counters to new runs; some initial runs predate receiver CPU instrumentation.
-`scripts/remote-benchmark.ps1` records receiver CPU and memory plus separately supplied transport
+`python scripts/remote-benchmark.py` records receiver CPU and memory plus separately supplied transport
 configuration. It does not invent unknown video bitrate, codec, sender CPU, or frame-loss numbers.
 
 ## Automatic location and capture-mode regression
@@ -111,14 +113,14 @@ repair-only joining or the complete benchmark matrix.
 Run the native fixtures with:
 
 ```powershell
-./scripts/local-e2e.ps1 -Sizes 1024,1048576,104857600 -Fps 60 -CellSize 4
+python scripts/local-e2e.py --sizes 1024 1048576 104857600 --fps 60 --cell-size 4
 # Auto discovery followed by moving only the test-owned sender window:
-./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -AutoLocate -MoveSender
+python scripts/local-e2e.py --sizes 1048576 --fps 60 --cell-size 4 --auto-locate --move-sender
 # Manual rectangle regression, obtained by the test harness from the sender:
-./scripts/local-e2e.ps1 -Sizes 1048576 -Fps 60 -CellSize 4 -ManualRect
+python scripts/local-e2e.py --sizes 1048576 --fps 60 --cell-size 4 --manual-rect
 ```
 
-For a repair-only native join, choose `-JoinDelaySeconds` greater than the source transmission time.
+For a repair-only native join, choose `--join-delay-seconds` greater than the source transmission time.
 The simulator already tests joining after all sources have passed. Follow [remote validation](remote-validation.md)
 for the 5/10/15/30 FPS × profile/cell-size matrix. The reported pass does not identify a matrix
 configuration; full matrix coverage remains unrecorded.

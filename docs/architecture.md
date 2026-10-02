@@ -91,6 +91,7 @@ API references: [StretchDIBits and bitmap functions](https://learn.microsoft.com
 6. Real local screen transfer in separate Windows sender/receiver processes.
 7. Real remote desktop tests, kept separate from simulator/local results.
 
-Run `scripts/check.ps1` before each logical commit. It runs fmt/check/clippy/test and fails at the
-first failing stage. Local E2E needs an unlocked interactive Windows desktop and permission to
+Run `python scripts/check.py` before each logical commit. It runs script regressions followed by
+fmt/check/clippy/test on Windows or Linux and fails at the first failing stage.
+Local E2E needs an unlocked interactive Windows desktop and permission to
 capture the sender region. Its generated fixtures, logs and previews live under ignored `output/`.

@@ -36,9 +36,7 @@ On the receiver, determine the physical-pixel rectangle containing only the full
 (exclude the title bar/borders). This manual crop is the intended Phase 1 capture input:
 
 ```powershell
-./scripts/remote-benchmark.ps1 -X 50 -Y 80 -Width 1536 -Height 864 `
-    -Profile balanced -SenderFps 15 -CellSize 8 -Transport RDP -Codec unknown `
-    -ExpectedSha256 THE_HASH_FROM_THE_SENDER
+python scripts/remote-benchmark.py --x 50 --y 80 --width 1536 --height 864 --profile balanced --sender-fps 15 --cell-size 8 --transport RDP --codec unknown --expected-sha256 THE_HASH_FROM_THE_SENDER
 ```
 
 Coordinates above are examples, not a detected rectangle. The script creates unique output files,
