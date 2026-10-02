@@ -3,7 +3,10 @@ mod win;
 fn main() {
     #[cfg(windows)]
     if let Err(error) = win::run() {
-        eprintln!("{error}");
+        eprintln!(
+            "Receiver failed: {}",
+            vft_tui::safe_text(&error.to_string())
+        );
         std::process::exit(1);
     }
     #[cfg(not(windows))]

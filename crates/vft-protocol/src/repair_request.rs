@@ -13,8 +13,15 @@ pub struct Target {
     pub deficit: Option<u32>,
 }
 impl Target {
-    pub fn budget(&self) -> u32 {
-        self.deficit.map_or(16, |d| (d + d.div_ceil(2) + 4).max(8))
+    pub fn budget(&self) -> Result<u32, Error> {
+        match self.deficit {
+            None => Ok(16),
+            Some(d) => d
+                .checked_add(d.div_ceil(2))
+                .and_then(|n| n.checked_add(4))
+                .map(|n| n.max(8))
+                .ok_or(Error::Limit),
+        }
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,7 +85,7 @@ impl RepairRequest {
             {
                 return Err(Error::Duplicate);
             }
-            let budget = t.budget();
+            let budget = t.budget()?;
             if budget > 128 {
                 return Err(Error::Limit);
             }
@@ -89,8 +96,10 @@ impl RepairRequest {
         }
         Ok(())
     }
-    pub fn total_budget(&self) -> u32 {
-        self.targets.iter().map(Target::budget).sum()
+    pub fn total_budget(&self) -> Result<u32, Error> {
+        self.targets
+            .iter()
+            .try_fold(0u32, |n, t| n.checked_add(t.budget()?).ok_or(Error::Limit))
     }
     pub fn entries(&self) -> String {
         let mut targets = self.targets.clone();
@@ -98,8 +107,8 @@ impl RepairRequest {
         targets
             .iter()
             .map(|t| match t.deficit {
-                Some(d) => format!("{}:{d}", t.generation + 1),
-                None => format!("{}", t.generation + 1),
+                Some(d) => format!("{}:{d}", u64::from(t.generation) + 1),
+                None => format!("{}", u64::from(t.generation) + 1),
             })
             .collect::<Vec<_>>()
             .join(",")
@@ -220,7 +229,32 @@ mod tests {
         let r = RepairRequest::parse(code, &m).unwrap();
         assert_eq!(r.id, Some(0x0123456789abcdef));
         assert_eq!(r.encode(&m).unwrap(), code);
-        assert_eq!(r.total_budget(), 8);
+        assert_eq!(r.total_budget().unwrap(), 8);
+        let lower = code
+            .split('/')
+            .enumerate()
+            .map(|(i, s)| {
+                if [1, 2, 4].contains(&i) {
+                    s.to_lowercase()
+                } else {
+                    String::from(s)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/");
+        assert_eq!(
+            RepairRequest::parse(&format!("  {lower}  "), &m).unwrap(),
+            r
+        );
+        for end in 0..code.len() {
+            assert!(RepairRequest::parse(&code[..end], &m).is_err());
+        }
+        assert!(Target {
+            generation: u32::MAX,
+            deficit: Some(u32::MAX)
+        }
+        .budget()
+        .is_err());
         assert!(RepairRequest::parse(&code.replace("1:1", "1:2"), &m).is_err());
         let mut other = m.clone();
         other.session[0] ^= 1;
@@ -254,7 +288,8 @@ mod tests {
         assert_eq!(
             RepairRequest::parse("18:3,42:1,90:7,91:2", &m)
                 .unwrap()
-                .total_budget(),
+                .total_budget()
+                .unwrap(),
             40
         );
         assert_eq!(
@@ -266,7 +301,8 @@ mod tests {
         assert_eq!(
             RepairRequest::parse("18, 42,90-91", &m)
                 .unwrap()
-                .total_budget(),
+                .total_budget()
+                .unwrap(),
             64
         );
     }

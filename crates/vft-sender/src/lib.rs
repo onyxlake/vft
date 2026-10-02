@@ -195,12 +195,12 @@ impl<S: ObjectSource> SenderSession<S> {
             let next = self.next_repairs.as_ref().or(cursors.as_ref()).unwrap()
                 [target.generation as usize];
             if next
-                .checked_add(u64::from(target.budget()))
+                .checked_add(u64::from(target.budget().map_err(Error::Request)?))
                 .is_none_or(|n| n > u64::from(u32::MAX) + 1)
             {
                 return Err(Error::Exhausted);
             }
-            remaining.push((target.generation, target.budget()));
+            remaining.push((target.generation, target.budget().map_err(Error::Request)?));
         }
         if request.id.is_some() {
             self.recent_requests
@@ -405,12 +405,17 @@ mod tests {
         let mut sender = SenderSession::new(m.clone(), &data[..], c).unwrap();
         let mut seen = alloc::collections::BTreeSet::new();
         let mut sources = alloc::collections::BTreeSet::new();
-        for frame in 0..5500 {
+        let mut ordinary_groups = alloc::collections::BTreeSet::new();
+        for frame in 0..12000 {
             if sender.manual_remaining() == 0 {
                 let r = RepairRequest::parse("1:64,2:64,3:2", &m).unwrap();
                 sender.apply_request(r).unwrap();
             }
+            let automatic_before = sender.progress().automatic_repairs;
             let p = sender.next_packet().unwrap();
+            if sender.progress().automatic_repairs > automatic_before {
+                ordinary_groups.insert(p.symbol.generation);
+            }
             assert_eq!(p.kind == PacketType::Manifest, frame % 30 == 0);
             match p.kind {
                 PacketType::SourceSymbol => assert!(sources.insert(p.symbol)),
@@ -420,6 +425,7 @@ mod tests {
         }
         assert_eq!(sources.len(), 130);
         assert!(sender.progress().automatic_repairs > 0);
+        assert_eq!(ordinary_groups.len(), 3);
         for generation in 0..3 {
             assert!(seen.iter().any(|s| s.generation == generation));
         }
@@ -499,6 +505,42 @@ mod tests {
             }
         );
         assert_eq!(s.manual_remaining(), 7);
+    }
+    #[test]
+    fn lazy_cursor_initialization_after_partial_automatic_round() {
+        let data = [9; 130];
+        let (m, c) = fixture(&data);
+        let mut s = SenderSession::new(m.clone(), &data[..], c).unwrap();
+        let mut seen = alloc::collections::BTreeSet::new();
+        while s.progress().automatic_repairs < 215 {
+            let p = s.next_packet().unwrap();
+            if p.kind == PacketType::RepairSymbol {
+                assert!(seen.insert(p.symbol));
+            }
+        }
+        s.apply_request(RepairRequest::parse("1,2,3", &m).unwrap())
+            .unwrap();
+        for _ in 0..300 {
+            let p = s.next_packet().unwrap();
+            if p.kind == PacketType::RepairSymbol {
+                assert!(seen.insert(p.symbol));
+            }
+        }
+    }
+    #[test]
+    fn manual_metadata_limit_leaves_automatic_transmission_available() {
+        let data = [9; 64];
+        let (mut m, c) = fixture(&data);
+        m.file_size = 1_000_000_000;
+        m.source_symbols = 1_000_000_000;
+        let mut s = SenderSession::new(m.clone(), &data[..], c).unwrap();
+        assert!(matches!(
+            s.apply_request(RepairRequest::parse("1", &m).unwrap()),
+            Err(Error::ManualLimit)
+        ));
+        assert!(s.next_repairs.is_none());
+        assert_eq!(s.next_packet().unwrap().kind, PacketType::Manifest);
+        assert_eq!(s.next_packet().unwrap().kind, PacketType::SourceSymbol);
     }
     #[test]
     fn schedules_manifest_sources_and_unbounded_repairs() {

@@ -1,3 +1,9 @@
+use std::io::IsTerminal;
+use std::sync::{
+    atomic::AtomicBool,
+    mpsc::{self, Receiver},
+    Arc, Mutex,
+};
 use std::{
     ffi::c_void,
     fs::OpenOptions,
@@ -8,6 +14,10 @@ use std::{
 };
 use vft_protocol::{Packet, PacketType, ProfileId};
 use vft_receiver::{Error as ReceiverError, Limits, ReceiverSession};
+use vft_tui::{
+    terminal::{random_id, receiver_ui, ReceiverCommand},
+    Lifecycle, SharedView, Stop, View,
+};
 use vft_visual::{locate, Error as VisualError, GridConfig, LumaImage, VisualFrame};
 use windows::{
     core::w,
@@ -41,6 +51,7 @@ impl Region {
     }
 }
 struct Options {
+    tui: Option<bool>,
     rect: Option<Region>,
     sender_window: bool,
     auto: bool,
@@ -59,10 +70,11 @@ fn options() -> AppResult<Option<Options>> {
 }
 fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
-        println!("vft-recv-win (--auto | --rect X Y WIDTH HEIGHT | --sender-window) --output FILE\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
+        println!("vft-recv-win (--auto | --rect X Y WIDTH HEIGHT | --sender-window) --output FILE\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
         return Ok(None);
     }
     let mut out = Options {
+        tui: None,
         rect: None,
         sender_window: false,
         auto: false,
@@ -85,6 +97,8 @@ fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
             Ok(v)
         };
         match arg.as_str() {
+            "--tui" => vft_tui::mode_flag(&mut out.tui, true)?,
+            "--no-tui" => vft_tui::mode_flag(&mut out.tui, false)?,
             "--rect" | "--search-rect" => {
                 let region = Region {
                     x: value()?.parse()?,
@@ -163,7 +177,9 @@ fn desktop_region() -> AppResult<Region> {
 fn local_region() -> AppResult<Region> {
     // DPI awareness is set before calling ClientToScreen so coordinates are physical pixels.
     unsafe {
-        let hwnd = FindWindowW(w!("VFTSenderWindow"), None)?;
+        let hwnd = FindWindowW(w!("VFTSenderWindow"), None).map_err(|e|format!(
+            "No local VFT sender window was found; start the sender or use --auto/--rect. Windows diagnostic: {e}"
+        ))?;
         let mut rect = RECT::default();
         GetClientRect(hwnd, &mut rect)?;
         let mut point = POINT::default();
@@ -346,6 +362,78 @@ pub fn run() -> AppResult<()> {
     let Some(options) = options()? else {
         return Ok(());
     };
+    let tui = vft_tui::choose_mode(
+        options.tui,
+        std::io::stdin().is_terminal(),
+        std::io::stdout().is_terminal(),
+    )?;
+    if !tui {
+        return run_capture(options, None);
+    }
+    let shared = Arc::new(Mutex::new(View {
+        title: String::from("VFT Receive"),
+        ..Default::default()
+    }));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let _panic_log = vft_tui::PanicLog::install(shared.clone());
+    let (tx, rx) = mpsc::sync_channel(32);
+    let worker_view = shared.clone();
+    let worker_stop = cancel.clone();
+    // Capture/ReceiverSession and all GDI handles are created and destroyed inside this worker.
+    let worker = std::thread::spawn(move || {
+        let context = ReceiveUi {
+            shared: worker_view.clone(),
+            cancel: worker_stop,
+            commands: rx,
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_capture(options, Some(&context))
+                .map_err(|e| format!("Capture/recovery failed: {e}"))
+        }))
+        .unwrap_or_else(|_| Err(String::from("Capture/recovery worker panicked")));
+        let mut view = worker_view.lock().unwrap();
+        view.worker_done = true;
+        if let Err(e) = &result {
+            view.state = Lifecycle::Failed;
+            view.result = e.clone();
+            view.log(e);
+        }
+        result
+    });
+    let ui_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        receiver_ui(shared.clone(), cancel.clone(), tx)
+    }))
+    .unwrap_or_else(|_| Err(std::io::Error::other("Receiver TUI panicked")));
+    vft_tui::stop(&cancel);
+    let result = worker
+        .join()
+        .map_err(|_| "Capture worker could not be joined")?;
+    ui_result?;
+    if result.is_ok() {
+        println!("{}", vft_tui::safe_text(&shared.lock().unwrap().result));
+    }
+    result.map_err(Into::into)
+}
+struct ReceiveUi {
+    shared: SharedView,
+    cancel: Stop,
+    commands: Receiver<ReceiverCommand>,
+}
+fn report(ui: Option<&ReceiveUi>, message: String) {
+    if let Some(ui) = ui {
+        ui.shared.lock().unwrap().log(&message);
+    } else {
+        println!("{message}");
+    }
+}
+fn warn(ui: Option<&ReceiveUi>, message: String) {
+    if let Some(ui) = ui {
+        ui.shared.lock().unwrap().log(&message);
+    } else {
+        eprintln!("{message}");
+    }
+}
+fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
@@ -363,8 +451,86 @@ pub fn run() -> AppResult<()> {
     let mut last_packet = None;
     let mut preview_saved = false;
     let interval = Duration::from_secs_f64(1.0 / f64::from(options.fps));
+    let mut page = 0;
+    let mut snapshot_time = start;
+    let mut previous = (0u64, 0u64, 0u64);
     loop {
         let iteration = Instant::now();
+        if let Some(ui) = ui {
+            if vft_tui::stopped(&ui.cancel) {
+                ui.shared.lock().unwrap().state = Lifecycle::Stopping;
+                save_stats(&options, &receiver, &metrics, start.elapsed())?;
+                return Err("Capture stopped before verified completion".into());
+            }
+            while let Ok(command) = ui.commands.try_recv() {
+                match command {
+                    ReceiverCommand::Page(p) => page = p,
+                    ReceiverCommand::Generate(selected) => {
+                        let generated = format!(
+                            "Unix {:.3} s",
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)?
+                                .as_secs_f64()
+                        );
+                        match vft_tui::generate_snapshot(&receiver, &selected, random_id, generated)
+                        {
+                            Ok(request) => ui.shared.lock().unwrap().request = Some(request),
+                            Err(e) => ui.shared.lock().unwrap().log(&e),
+                        }
+                    }
+                }
+            }
+            if snapshot_time.elapsed() >= Duration::from_millis(200) {
+                let dt = snapshot_time.elapsed().as_secs_f64();
+                let progress = receiver.progress();
+                let mut v = ui.shared.lock().unwrap();
+                v.state = Lifecycle::Running;
+                v.manifest = receiver.manifest().cloned();
+                vft_tui::update_groups(&mut v, &receiver, page);
+                let total = receiver.manifest().map_or(0, |m| m.generations());
+                let sources = receiver.manifest().map_or(0, |m| m.source_symbols);
+                v.title = receiver.manifest().map_or(
+                    String::from("VFT Receive - waiting for manifest"),
+                    |m| {
+                        format!(
+                            "VFT Receive - session: {}",
+                            m.session
+                                .iter()
+                                .map(|b| format!("{b:02X}"))
+                                .collect::<String>()
+                        )
+                    },
+                );
+                v.details = vec![
+                    format!(
+                        "Recovered: {} / {} groups   Rank: {} / {}   SHA: {:?}",
+                        progress.completed_generations,
+                        total,
+                        progress.rank_symbols,
+                        sources,
+                        progress.hash
+                    ),
+                    format!(
+                        "Captures: {:.1}/s   Adjacent unique frames: {:.1}/s   Rank gain: {:.1}/s",
+                        (metrics.captures - previous.0) as f64 / dt,
+                        (metrics.unique_frames - previous.1) as f64 / dt,
+                        (progress.rank_symbols - previous.2) as f64 / dt
+                    ),
+                    format!(
+                        "Elapsed: {:.1}s  Invalid frames: {}  Location locks: {}",
+                        start.elapsed().as_secs_f64(),
+                        metrics.invalid_frames,
+                        metrics.location_locks
+                    ),
+                ];
+                previous = (
+                    metrics.captures,
+                    metrics.unique_frames,
+                    progress.rank_symbols,
+                );
+                snapshot_time = Instant::now();
+            }
+        }
         if start.elapsed().as_secs() >= options.timeout {
             save_stats(&options, &receiver, &metrics, start.elapsed())?;
             return Err(format!(
@@ -396,10 +562,13 @@ pub fn run() -> AppResult<()> {
             })?;
             let Some(found) = found else {
                 if last_report.elapsed() >= Duration::from_secs(1) {
-                    println!(
-                        "Searching for visible VFT frame; scans={} progress={:?}",
-                        metrics.location_scans,
-                        receiver.progress()
+                    report(
+                        ui,
+                        format!(
+                            "Searching for visible VFT frame; scans={} progress={:?}",
+                            metrics.location_scans,
+                            receiver.progress()
+                        ),
                     );
                     last_report = Instant::now();
                 }
@@ -419,9 +588,12 @@ pub fn run() -> AppResult<()> {
             search_capture = None;
             failures_since = None;
             metrics.location_locks += 1;
-            println!(
-                "LOCATED rect={} {} {} {} profile={:?}",
-                region.x, region.y, region.width, region.height, found.packet.profile
+            report(
+                ui,
+                format!(
+                    "LOCATED rect={} {} {} {} profile={:?}",
+                    region.x, region.y, region.width, region.height, found.packet.profile
+                ),
             );
             (desktop.crop(found.rect)?, Ok(found.packet))
         } else {
@@ -470,22 +642,30 @@ pub fn run() -> AppResult<()> {
                     metrics.unique_frames += 1;
                     last_packet = Some(wire.clone());
                 }
-                match receiver.push_packet(&wire) {
+                match receiver.push_packet_observed(&wire, || {
+                    if let Some(ui) = ui {
+                        ui.shared.lock().unwrap().details =
+                            vec![String::from("Verifying SHA-256...")];
+                    }
+                }) {
                     Ok(_) => {}
                     Err(ReceiverError::HashMismatch) => {
                         save_stats(&options, &receiver, &metrics, start.elapsed())?;
                         return Err("reconstructed object failed SHA-256 verification".into());
                     }
-                    Err(error) => eprintln!("Rejected packet: {error}"),
+                    Err(error) => warn(ui, format!("Rejected packet: {error}")),
                 }
                 if let Some(manifest) = receiver.manifest() {
                     if selected.is_none() {
-                        println!(
-                            "filename={} size={} session={:02x?} profile={:?}",
-                            manifest.filename,
-                            manifest.file_size,
-                            manifest.session,
-                            manifest.profile
+                        report(
+                            ui,
+                            format!(
+                                "filename={} size={} session={:02x?} profile={:?}",
+                                manifest.filename,
+                                manifest.file_size,
+                                manifest.session,
+                                manifest.profile
+                            ),
                         );
                     }
                     selected = Some(manifest.profile);
@@ -502,25 +682,49 @@ pub fn run() -> AppResult<()> {
                 {
                     capture = None;
                     failures_since = None;
-                    println!("Lost VFT frame; restarting desktop search");
+                    report(
+                        ui,
+                        String::from("Lost VFT frame; restarting desktop search"),
+                    );
                 }
             }
         }
         if receiver.is_complete() {
-            save_verified(&receiver, &options.output)?;
+            save_verified(&receiver, &options.output)
+                .map_err(|e| format!("Verified output creation/write failed: {e}"))?;
             save_stats(&options, &receiver, &metrics, start.elapsed())?;
             let elapsed = start.elapsed().as_secs_f64();
-            println!("COMPLETE sha256=verified bytes={} elapsed={elapsed:.3}s goodput={:.1} KiB/s progress={:?} invalid_frames={}",
-                receiver.progress().recovered_bytes,receiver.progress().recovered_bytes as f64/elapsed/1024.0,receiver.progress(),metrics.invalid_frames);
+            if let Some(ui) = ui {
+                let mut v = ui.shared.lock().unwrap();
+                v.state = Lifecycle::Complete;
+                vft_tui::update_groups(&mut v, &receiver, 0);
+                v.result = format!(
+                    "Complete - SHA-256 verified and saved to {}",
+                    options.output.display()
+                );
+                v.details = vec![
+                    v.result.clone(),
+                    format!(
+                        "Bytes: {}   Elapsed: {elapsed:.3}s   Verified goodput: {:.1} KiB/s",
+                        receiver.progress().recovered_bytes,
+                        receiver.progress().recovered_bytes as f64 / elapsed / 1024.0
+                    ),
+                ];
+            }
+            report(ui, format!("COMPLETE sha256=verified bytes={} elapsed={elapsed:.3}s goodput={:.1} KiB/s progress={:?} invalid_frames={}",
+                receiver.progress().recovered_bytes,receiver.progress().recovered_bytes as f64/elapsed/1024.0,receiver.progress(),metrics.invalid_frames));
             return Ok(());
         }
         if last_report.elapsed() >= Duration::from_secs(1) {
-            println!(
-                "progress={:?} captures={} valid_frames={} invalid_frames={}",
-                receiver.progress(),
-                metrics.captures,
-                metrics.valid_frames,
-                metrics.invalid_frames
+            report(
+                ui,
+                format!(
+                    "progress={:?} captures={} valid_frames={} invalid_frames={}",
+                    receiver.progress(),
+                    metrics.captures,
+                    metrics.valid_frames,
+                    metrics.invalid_frames
+                ),
             );
             last_report = Instant::now();
         }
@@ -632,6 +836,7 @@ mod tests {
         file.write_all(b"verified file bytes").unwrap();
         drop(file);
         let options = Options {
+            tui: Some(false),
             rect: None,
             sender_window: true,
             auto: false,

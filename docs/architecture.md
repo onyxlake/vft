@@ -18,6 +18,28 @@ They use no filesystem, Windows, UI or capture APIs. `vft-testkit` uses std for 
 The only external shared dependency is SHA-256 (`sha2` with default features disabled).
 Windows APIs are target-specific dependencies of the two applications.
 
+`apps/vft-tui` supplies common English control models, Unicode input editing, bounded logs and a
+Windows-only Ratatui 0.29 / Crossterm 0.28 backend. Cargo.lock pins its transitive dependencies
+and the locked workspace is checked with Rust 1.85. Both apps choose TUI once at startup when
+stdin and stdout are interactive; `--no-tui` preserves script behavior and explicit `--tui`
+requires both terminals. Help and argument errors remain ordinary text.
+
+The sender's Win32 thread owns SenderSession, HWND and GDI. A terminal thread sends small commands
+through a 32-slot queue and posts a private wake message; changes occur at guarded message
+boundaries. Stop has a separate atomic signal, including while paused. The receiver creates and
+destroys Capture and ReceiverSession on its capture worker; the main thread owns its terminal.
+Progress replaces a latest snapshot, with 5 Hz rendering, six-row incomplete-group pages and a
+200-line log ring. Request text is frozen at a capture boundary and paginated into 256-target
+codes with OS-random IDs. No pixels or recovered file copies cross into the terminal.
+
+Receiver verification notifies the UI immediately before hashing; Complete is published only
+after SHA verification and create-new output succeed. TUI results remain visible until Quit,
+while CLI completion still exits. RAII restores raw mode, alternate screen, cursor and bracketed
+paste after normal exits, errors and unwind; workers are stopped and joined before final summaries.
+Forced process termination cannot restore a terminal. The independent visual window remains the
+transport and must be kept clear of the control terminal. Manual text does not create an automated
+feedback channel or imply receiver completion at the sender.
+
 Sender input implements `ObjectSource::read_exact_at`. The Windows adapter keeps an open file,
 hashes it in 64 KiB chunks, and seeks on demand. Encoder caching retains only one 64-symbol
 generation (about 305 KiB for balanced), plus frame buffers. The browser adapter supplies the same

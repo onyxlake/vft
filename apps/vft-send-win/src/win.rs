@@ -1,3 +1,9 @@
+use std::io::IsTerminal;
+use std::sync::{
+    atomic::AtomicBool,
+    mpsc::{self, Receiver},
+    Arc, Mutex,
+};
 use std::{
     cell::RefCell,
     ffi::c_void,
@@ -8,6 +14,10 @@ use std::{
 };
 use vft_protocol::{Digest, Manifest, ProfileId, Sha256};
 use vft_sender::{ObjectSource, SenderConfig, SenderSession};
+use vft_tui::{
+    terminal::{sender_ui, SenderCommand},
+    Lifecycle, SharedView, Stop, View,
+};
 use vft_visual::{GridConfig, LumaImage};
 use windows::{
     core::{w, PCWSTR},
@@ -18,6 +28,7 @@ use windows::{
         UI::{HiDpi::*, WindowsAndMessaging::*},
     },
 };
+const WM_CONTROL: u32 = WM_APP + 1;
 
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
 struct WindowGuard(HWND);
@@ -41,6 +52,7 @@ impl ObjectSource for FileSource {
     }
 }
 struct Options {
+    tui: Option<bool>,
     file: Option<PathBuf>,
     profile: ProfileId,
     fps: u32,
@@ -54,10 +66,11 @@ struct Options {
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\nESC exits; SPACE pauses; F11 toggles fullscreen.");
+        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\nESC exits; SPACE pauses; F11 toggles fullscreen.");
         return Ok(None);
     }
     let mut out = Options {
+        tui: None,
         file: None,
         profile: ProfileId::Balanced,
         fps: 15,
@@ -79,6 +92,8 @@ fn options() -> AppResult<Option<Options>> {
             Ok(v)
         };
         match arg.as_str() {
+            "--tui" => vft_tui::mode_flag(&mut out.tui, true)?,
+            "--no-tui" => vft_tui::mode_flag(&mut out.tui, false)?,
             "--profile" => {
                 out.profile = match value()? {
                     "robust" => ProfileId::Robust,
@@ -127,15 +142,41 @@ struct App {
     fullscreen: bool,
     placement: RECT,
     frame_count: u64,
+    presented_frames: u64,
     error: Option<String>,
     filename: String,
+    controls: Option<Controls>,
+}
+struct Controls {
+    shared: SharedView,
+    cancel: Stop,
+    commands: Receiver<SenderCommand>,
+}
+struct TerminalWorker {
+    shared: SharedView,
+    cancel: Stop,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+impl Drop for TerminalWorker {
+    fn drop(&mut self) {
+        vft_tui::stop(&self.cancel);
+        self.shared.lock().unwrap().worker_done = true;
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
 }
 impl App {
     fn new(options: Options) -> AppResult<Self> {
         let grid = GridConfig::for_profile(options.profile);
         let mut filename = String::from("test pattern");
         let sender = if let Some(path) = &options.file {
-            let mut file = File::open(path)?;
+            let mut file = File::open(path).map_err(|e| {
+                format!(
+                    "Cannot open input file {}: {e}",
+                    vft_tui::safe_text(&path.display().to_string())
+                )
+            })?;
             let size = file.metadata()?.len();
             filename = path
                 .file_name()
@@ -174,10 +215,12 @@ impl App {
                 source_symbols: count,
                 profile: options.profile,
             };
-            println!(
-                "filename={} size={} session={:02x?} profile={:?} fps={}",
-                manifest.filename, size, session, options.profile, options.fps
-            );
+            if options.tui != Some(true) {
+                println!(
+                    "filename={} size={} session={:02x?} profile={:?} fps={}",
+                    manifest.filename, size, session, options.profile, options.fps
+                );
+            }
             Some(SenderSession::new(
                 manifest,
                 FileSource(file),
@@ -201,13 +244,16 @@ impl App {
             fullscreen: false,
             placement: RECT::default(),
             frame_count: 0,
+            presented_frames: 0,
             error: None,
             filename,
+            controls: None,
         };
         app.advance()?;
         Ok(app)
     }
     fn advance(&mut self) -> AppResult<()> {
+        let before = self.sender.as_ref().map_or(0, |s| s.manual_remaining());
         let image = if let Some(sender) = &mut self.sender {
             sender.next_frame()?.render(self.options.cell_size)?
         } else {
@@ -221,7 +267,113 @@ impl App {
         };
         self.pixels = image.pixels.iter().flat_map(|&v| [v, v, v, 0]).collect();
         self.frame_count += 1;
+        if before > 0
+            && self
+                .sender
+                .as_ref()
+                .is_some_and(|s| s.manual_remaining() == 0)
+        {
+            if let Some(controls) = &self.controls {
+                controls
+                    .shared
+                    .lock()
+                    .unwrap()
+                    .log("Manual repair batch sent");
+            }
+        }
         Ok(())
+    }
+    fn publish(&self) {
+        if let Some(c) = &self.controls {
+            let mut view = c.shared.lock().unwrap();
+            view.state = if self.paused {
+                Lifecycle::Paused
+            } else {
+                Lifecycle::Running
+            };
+            view.title = format!("VFT Send - {}", self.filename);
+            if let Some(sender) = &self.sender {
+                let p = sender.progress();
+                let m = sender.manifest();
+                view.manifest = Some(m.clone());
+                view.details = vec![
+                    format!(
+                        "Session: {}  Tag: {}",
+                        m.session
+                            .iter()
+                            .map(|b| format!("{b:02X}"))
+                            .collect::<String>(),
+                        vft_protocol::repair_request::manifest_tag(m).unwrap_or_default()
+                    ),
+                    format!(
+                        "Phase: {}   Requested FPS: {}   Presented frames: {}",
+                        if sender.manual_remaining() > 0 {
+                            "Manual repair"
+                        } else if p.source_symbols < u64::from(m.source_symbols) {
+                            "Source"
+                        } else {
+                            "Automatic repair"
+                        },
+                        self.options.fps,
+                        self.presented_frames
+                    ),
+                    format!(
+                        "Source: {}   Automatic repairs: {}   Manual repairs: {}   Remaining: {}",
+                        p.source_symbols,
+                        p.automatic_repairs,
+                        p.manual_repairs,
+                        sender.manual_remaining()
+                    ),
+                ];
+            } else {
+                view.details = vec![format!(
+                    "Test pattern   Requested FPS: {}   Presented frames: {}",
+                    self.options.fps, self.presented_frames
+                )];
+            }
+        }
+    }
+    fn consume_controls(&mut self) -> bool {
+        let Some(controls) = &self.controls else {
+            return false;
+        };
+        if vft_tui::stopped(&controls.cancel) {
+            return true;
+        }
+        while let Ok(command) = controls.commands.try_recv() {
+            match command {
+                SenderCommand::TogglePause => self.paused = !self.paused,
+                SenderCommand::Cancel => {
+                    if let Some(s) = &mut self.sender {
+                        s.cancel_manual();
+                    }
+                    controls
+                        .shared
+                        .lock()
+                        .unwrap()
+                        .log("Unsent manual repair budget cancelled");
+                }
+                SenderCommand::Apply { serial, request } => {
+                    let result = self
+                        .sender
+                        .as_mut()
+                        .ok_or_else(|| String::from("No file session"))
+                        .and_then(|s| s.apply_request(request).map_err(|e| e.to_string()));
+                    let mut view = controls.shared.lock().unwrap();
+                    view.applied = serial;
+                    view.result = match result {
+                        Ok(vft_sender::ApplyResult::Applied) => String::from("Request applied"),
+                        Ok(vft_sender::ApplyResult::Duplicate) => {
+                            String::from("Duplicate request: no additional repairs")
+                        }
+                        Err(e) => format!("Request rejected: {e}"),
+                    };
+                    let message = view.result.clone();
+                    view.log(&message);
+                }
+            }
+        }
+        false
     }
 }
 fn wide(text: &str) -> Vec<u16> {
@@ -243,9 +395,15 @@ fn bitmap_info(width: i32, height: i32) -> BITMAPINFO {
 }
 
 pub fn run() -> AppResult<()> {
-    let Some(options) = options()? else {
+    let Some(mut options) = options()? else {
         return Ok(());
     };
+    let tui = vft_tui::choose_mode(
+        options.tui,
+        std::io::stdin().is_terminal(),
+        std::io::stdout().is_terminal(),
+    )?;
+    options.tui = Some(tui);
     let app = Box::new(RefCell::new(App::new(options)?));
     let (width, height, position, fullscreen, fps) = {
         let app = app.borrow();
@@ -318,6 +476,53 @@ pub fn run() -> AppResult<()> {
             let _ = DestroyWindow(hwnd);
             return Err("SetTimer failed".into());
         }
+        // Only numeric HWND identity crosses threads, for PostMessageW; UI never touches GDI/state.
+        let mut _panic_log = None;
+        let _terminal_worker = if tui {
+            let shared = Arc::new(Mutex::new(View::default()));
+            let cancel = Arc::new(AtomicBool::new(false));
+            _panic_log = Some(vft_tui::PanicLog::install(shared.clone()));
+            let (tx, rx) = mpsc::sync_channel(32);
+            app.borrow_mut().controls = Some(Controls {
+                shared: shared.clone(),
+                cancel: cancel.clone(),
+                commands: rx,
+            });
+            app.borrow().publish();
+            let ui_view = shared.clone();
+            let ui_stop = cancel.clone();
+            let handle = hwnd.0 as usize;
+            let thread = std::thread::spawn(move || {
+                let wake = || {
+                    let _ = PostMessageW(
+                        Some(HWND(handle as *mut c_void)),
+                        WM_CONTROL,
+                        WPARAM(0),
+                        LPARAM(0),
+                    );
+                };
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    sender_ui(ui_view.clone(), ui_stop.clone(), tx, wake)
+                }))
+                .unwrap_or_else(|_| Err(std::io::Error::other("Sender TUI panicked")));
+                if let Err(e) = result {
+                    let mut view = ui_view.lock().unwrap();
+                    view.state = Lifecycle::Failed;
+                    view.result = format!("Terminal controls failed: {e}");
+                    let message = view.result.clone();
+                    view.log(&message);
+                }
+                vft_tui::stop(&ui_stop);
+                wake();
+            });
+            Some(TerminalWorker {
+                shared,
+                cancel,
+                thread: Some(thread),
+            })
+        } else {
+            None
+        };
         let mut message = MSG::default();
         loop {
             let result = GetMessageW(&mut message, None, 0, 0).0;
@@ -338,6 +543,17 @@ pub fn run() -> AppResult<()> {
     }
     if let Some(error) = app.borrow_mut().error.take() {
         return Err(error.into());
+    }
+    if let Some(c) = &app.borrow().controls {
+        let view = c.shared.lock().unwrap();
+        if view.state == Lifecycle::Failed {
+            return Err(view.result.clone().into());
+        }
+        println!(
+            "Sender stopped. Presented frames: {}. {}",
+            app.borrow().presented_frames,
+            view.logs.back().cloned().unwrap_or_default()
+        );
     }
     Ok(())
 }
@@ -380,7 +596,10 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
         }
         // DefWindowProc/SetWindowText/SetWindowPos can synchronously re-enter this procedure.
         // Borrow App only for the four messages that actually access it.
-        if !matches!(msg, WM_PAINT | WM_ERASEBKGND | WM_TIMER | WM_KEYDOWN) {
+        if !matches!(
+            msg,
+            WM_PAINT | WM_ERASEBKGND | WM_TIMER | WM_KEYDOWN | WM_CONTROL
+        ) {
             return DefWindowProcW(hwnd, msg, wparam, lparam);
         }
         let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const RefCell<App>;
@@ -391,7 +610,15 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
             return DefWindowProcW(hwnd, msg, wparam, lparam);
         };
         let app = &mut *borrowed;
+        if matches!(msg, WM_TIMER | WM_CONTROL) && app.consume_controls() {
+            let _ = DestroyWindow(hwnd);
+            return LRESULT(0);
+        }
         match msg {
+            WM_CONTROL => {
+                app.publish();
+                LRESULT(0)
+            }
             WM_PAINT => {
                 let mut paint = PAINTSTRUCT::default();
                 let dc = BeginPaint(hwnd, &mut paint);
@@ -413,6 +640,7 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
                     SRCCOPY,
                 );
                 let _ = EndPaint(hwnd, &paint);
+                app.presented_frames += 1;
                 if let Some(path) = &app.options.rect_file {
                     let mut origin = POINT::default();
                     let _ = ClientToScreen(hwnd, &mut origin);
@@ -454,6 +682,7 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
                     let _ = SetWindowTextW(hwnd, PCWSTR(title.as_ptr()));
                     let _ = InvalidateRect(Some(hwnd), None, false);
                 }
+                app.publish();
                 LRESULT(0)
             }
             WM_KEYDOWN => {
@@ -470,6 +699,7 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
                     }
                     _ => {}
                 }
+                app.publish();
                 LRESULT(0)
             }
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),

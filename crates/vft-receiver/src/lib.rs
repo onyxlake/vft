@@ -146,16 +146,28 @@ impl ReceiverSession {
     }
     /// Accept wire bytes so CRC validation cannot be accidentally skipped.
     pub fn push_packet(&mut self, bytes: &[u8]) -> Result<Event, Error> {
+        self.push_packet_observed(bytes, || {})
+    }
+    /// Notify an adapter immediately before the full-file hash starts; no file data is exposed.
+    pub fn push_packet_observed(
+        &mut self,
+        bytes: &[u8],
+        mut on_verifying: impl FnMut(),
+    ) -> Result<Event, Error> {
         self.progress.received_packets += 1;
         let result = Packet::decode(bytes)
             .map_err(Error::from)
-            .and_then(|packet| self.push_validated(packet));
+            .and_then(|packet| self.push_validated(packet, &mut on_verifying));
         if result.is_err() {
             self.progress.invalid_packets += 1;
         }
         result
     }
-    fn push_validated(&mut self, packet: Packet) -> Result<Event, Error> {
+    fn push_validated(
+        &mut self,
+        packet: Packet,
+        on_verifying: &mut dyn FnMut(),
+    ) -> Result<Event, Error> {
         if let Some(manifest) = &self.manifest {
             if packet.session != manifest.session || packet.object != manifest.object {
                 self.progress.ignored_packets += 1;
@@ -187,7 +199,7 @@ impl ReceiverSession {
                 return Err(Error::Limit);
             }
             self.manifest = Some(manifest);
-            self.verify_if_ready()?;
+            self.verify_if_ready(on_verifying)?;
             return Ok(if self.is_complete() {
                 Event::Complete
             } else {
@@ -245,7 +257,7 @@ impl ReceiverSession {
             self.decoders.remove(&generation);
         }
         self.remember(packet.symbol);
-        self.verify_if_ready()?;
+        self.verify_if_ready(on_verifying)?;
         Ok(if self.is_complete() {
             Event::Complete
         } else {
@@ -264,7 +276,7 @@ impl ReceiverSession {
         self.seen.insert(symbol);
         self.recent.push_back(symbol);
     }
-    fn verify_if_ready(&mut self) -> Result<(), Error> {
+    fn verify_if_ready(&mut self, on_verifying: &mut dyn FnMut()) -> Result<(), Error> {
         if self.progress.hash == HashStatus::Failed {
             return Err(Error::HashMismatch);
         }
@@ -277,6 +289,7 @@ impl ReceiverSession {
         if self.progress.completed_generations != manifest.generations() {
             return Ok(());
         }
+        on_verifying();
         let mut hash = Sha256::new();
         for data in self.recovered.values() {
             hash.update(data);
@@ -339,10 +352,19 @@ mod tests {
             receiver.push_packet(&bytes),
             Err(Error::Protocol(vft_protocol::Error::Crc))
         ));
+        let mut notified = false;
         assert_eq!(
-            receiver.push_packet(&packet.encode().unwrap()).unwrap(),
+            receiver
+                .push_packet_observed(&packet.encode().unwrap(), || notified = true)
+                .unwrap(),
             Event::Complete
         );
+        assert!(notified);
+        receiver
+            .push_packet_observed(&packet.encode().unwrap(), || {
+                panic!("Verified session must not rehash")
+            })
+            .unwrap();
         assert_eq!(receiver.reconstruct().unwrap(), vec![]);
         assert_eq!(receiver.generation_progress().count(), 0);
     }
