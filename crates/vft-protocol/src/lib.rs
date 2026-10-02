@@ -1,6 +1,7 @@
 //! Version-zero wire format. No I/O or platform dependencies; all integers are little endian.
 #![no_std]
 extern crate alloc;
+pub mod repair_request;
 
 use alloc::{string::String, vec::Vec};
 use core::fmt;

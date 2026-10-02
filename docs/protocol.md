@@ -93,3 +93,21 @@ for completed generations. Receiver defaults limit file length to 256 MiB and so
 
 Golden vectors in `tests/golden/` fix packet, manifest and repair bytes. They were independently
 generated using Python `struct`, `hashlib`, and explicit CRC/FEC arithmetic.
+
+## Optional manual repair text (VFR1)
+
+`vft-protocol::repair_request` parses human input independently of visual packets. Group numbers
+are one-based in text and zero-based in the core. Simple lists (`18,42,90-91`) request sixteen
+fresh repairs per group; `group:deficit` uses `max(8, deficit + ceil(deficit/2) + 4)` packets.
+Deficits must be 1..k, including the last short generation. Duplicate/overlapping groups are errors.
+
+Full codes are `VFR1/TAG/REQUEST-ID/group:deficit,.../CRC`. TAG is the first eight SHA-256 bytes
+of the complete canonical manifest, as sixteen uppercase hexadecimal digits. REQUEST-ID is an
+adapter-generated random u64 in sixteen hexadecimal digits. Entries use ascending groups and
+canonical decimal numbers. CRC is CRC32C of the canonical ASCII prefix through entries, as eight
+hexadecimal digits. Outer whitespace and hexadecimal case are accepted; other syntax is strict.
+Full codes never fall back to simple parsing. Limits are 4096 input bytes, 256 expanded targets,
+128 repairs per group and 32768 repairs per request. Tags/checksums detect mistakes, not identity.
+
+The independently derived manifest-v0 vector produces tag `89BF47CBF57E2AAB` and request
+`VFR1/89BF47CBF57E2AAB/0123456789ABCDEF/1:1/BC78F06C`. The existing binary wire format is unchanged.

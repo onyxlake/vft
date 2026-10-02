@@ -88,6 +88,13 @@ pub struct ReceiverSession {
     recent: VecDeque<SymbolId>,
     progress: Progress,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GenerationProgress {
+    pub generation: u32,
+    pub source_count: u32,
+    pub rank: u32,
+    pub complete: bool,
+}
 impl Default for ReceiverSession {
     fn default() -> Self {
         Self::new(Limits::default())
@@ -110,6 +117,29 @@ impl ReceiverSession {
     }
     pub fn progress(&self) -> Progress {
         self.progress
+    }
+    /// Lazy read-only progress, including unseen generations without allocating decoders.
+    pub fn generation_progress(&self) -> impl Iterator<Item = GenerationProgress> + '_ {
+        (0..self.manifest.as_ref().map_or(0, Manifest::generations)).map(|generation| {
+            let source_count = self
+                .manifest
+                .as_ref()
+                .unwrap()
+                .generation_symbols(generation)
+                .unwrap();
+            let complete = self.recovered.contains_key(&generation);
+            let rank = if complete {
+                source_count
+            } else {
+                self.decoders.get(&generation).map_or(0, |d| d.rank())
+            };
+            GenerationProgress {
+                generation,
+                source_count,
+                rank,
+                complete,
+            }
+        })
     }
     pub fn is_complete(&self) -> bool {
         self.progress.hash == HashStatus::Verified
@@ -314,6 +344,45 @@ mod tests {
             Event::Complete
         );
         assert_eq!(receiver.reconstruct().unwrap(), vec![]);
+        assert_eq!(receiver.generation_progress().count(), 0);
+    }
+    #[test]
+    fn generation_progress_includes_unseen_short_and_completed_groups() {
+        let mut r = ReceiverSession::default();
+        assert_eq!(r.generation_progress().count(), 0);
+        let p = manifest_packet(Sha256::digest([7; 65]).into(), 65);
+        r.push_packet(&p.encode().unwrap()).unwrap();
+        let groups: Vec<_> = r.generation_progress().collect();
+        assert_eq!(
+            groups[0],
+            GenerationProgress {
+                generation: 0,
+                source_count: 64,
+                rank: 0,
+                complete: false
+            }
+        );
+        assert_eq!(groups[1].source_count, 1);
+        assert!(r.decoders.is_empty());
+        let source = Packet {
+            kind: PacketType::SourceSymbol,
+            symbol: SymbolId {
+                generation: 1,
+                index: 0,
+            },
+            payload: vec![7],
+            ..p
+        };
+        r.push_packet(&source.encode().unwrap()).unwrap();
+        assert_eq!(
+            r.generation_progress().nth(1).unwrap(),
+            GenerationProgress {
+                generation: 1,
+                source_count: 1,
+                rank: 1,
+                complete: true
+            }
+        );
     }
     #[test]
     fn hash_mismatch_never_completes() {
