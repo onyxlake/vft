@@ -108,6 +108,13 @@ receiver supports group selection, R to freeze requests and P for the copy view.
 See [README controls](../README.md). Capture continues while reading a request; verified
 completion remains in TUI until Q, whereas ordinary CLI exits automatically.
 
+[Kitty/Hyprland TUI validation](benchmarks/linux-tui-20261016.md) passes a SHA-verified
+1 MiB transfer with default TUI selection, pause/resume, resize recovery, Unicode/paste
+editing, request apply/cancel/duplicate handling, copy view and graceful exit restoration.
+Completion publishes final verified byte/hash/group counters and keeps the output path in
+scrollable result text, including when returning to the frozen request panel. Closing the
+sender editor clears stale preview notices. Physical-keyboard and broader TUI acceptance remain.
+
 Keep the terminal away from the visible frame. Raw mode, alternate screen and cursor
 are restored on ordinary errors/unwind; forced termination cannot promise restoration.
 No clipboard, shared filesystem, network connection between endpoints or feedback is
@@ -144,7 +151,7 @@ The harness opens the sender and then the portal; the user selects a window/moni
 for each size. It creates unique evidence under ignored `output/`, preserves failed
 logs and previews, compares input/output SHA-256 independently, and stops only children
 it started. Unknown CPU/memory/display FPS fields stay blank. Movement/occlusion and
-TUI interaction need manual testing. The recorded passes establish local Wayland
+broader TUI interaction need additional testing. The recorded passes establish local Wayland
 evidence for that configuration; cross-platform screen transfer and real remote acceptance remain
 separate from compilation and synthetic recovery. Existing M14 limitations are unchanged.
 

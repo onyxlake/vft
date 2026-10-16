@@ -209,6 +209,7 @@ pub fn sender_ui(
                             editing = false;
                             preview = None;
                             scroll = 0;
+                            notice.clear();
                         }
                         KeyCode::Enter if pending.is_none() => {
                             if let Some(request) = preview.clone() {
@@ -271,6 +272,7 @@ pub fn sender_ui(
                         }
                         KeyCode::Char('r' | 'R') => {
                             editing = true;
+                            notice.clear();
                             None
                         }
                         KeyCode::Char(' ') => Some(SenderCommand::TogglePause),
@@ -320,6 +322,26 @@ fn update_request_panel(
 fn copy_text(request: &RequestSnapshot, page: usize) -> String {
     format!("Frozen progress snapshot at {}.\r\nCopy view does not pause capture/recovery.\r\nRequest page {} / {}\r\nGroups / rank deficits:\r\n{}\r\nFull request code (terminal wrapping only):\r\n{}\r\nTab: return to TUI  Left/Right: page  R: refresh  Q / Ctrl+C: quit\r\n",safe_text(&request.generated),page+1,request.codes.len(),request.entries.get(page).map_or("",String::as_str),request.codes.get(page).map_or("",String::as_str))
 }
+fn request_body(view: &View, page: usize) -> String {
+    let mut text = if view.worker_done {
+        format!("{:?}: {}\n\n", view.state, safe_text(&view.result))
+    } else {
+        String::new()
+    };
+    text.push_str(&view.request.as_ref().map_or(
+        String::from("Generating request..."),
+        |r| format!(
+            "Frozen progress snapshot at {}. {}\nRequest page {} / {}\nGroups / rank deficits: {}\n\n{}",
+            r.generated,
+            if view.worker_done { "Capture has ended." } else { "Recovery continues." },
+            page + 1,
+            r.codes.len(),
+            r.entries[page],
+            r.codes[page]
+        ),
+    ));
+    text
+}
 pub fn receiver_ui(
     shared: SharedView,
     cancel: Stop,
@@ -345,7 +367,7 @@ pub fn receiver_ui(
             }
         }
         let body = if panel {
-            v.request.as_ref().map_or(String::from("Generating request..."),|r|format!("Frozen progress snapshot at {}. Recovery continues.\nRequest page {} / {}\nGroups / rank deficits: {}\n\n{}",r.generated,code_page+1,r.codes.len(),r.entries[code_page],r.codes[code_page]))
+            request_body(&v, code_page)
         } else {
             let mut text=format!("Incomplete groups: {}  Page {} / {}  Selected: {}\nGroup      Rank / Total    Deficit\n",v.missing,v.page+1,v.missing.div_ceil(PAGE_SIZE).max(1),selected.len());
             if v.worker_done {
@@ -492,6 +514,28 @@ pub fn receiver_ui(
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+    #[test]
+    fn finished_request_panel_keeps_result_and_frozen_code() {
+        for state in [Lifecycle::Complete, Lifecycle::Failed] {
+            let view = View {
+                state,
+                worker_done: true,
+                result: String::from("SHA-256 verified; output: /output/recovered.bin"),
+                request: Some(RequestSnapshot {
+                    generated: String::from("before completion"),
+                    codes: vec![String::from("VFR1/frozen-code")],
+                    entries: vec![String::from("1:3")],
+                }),
+                ..Default::default()
+            };
+            let text = request_body(&view, 0);
+            assert!(text.contains(&format!("{state:?}:")));
+            assert!(text.contains("/output/recovered.bin"));
+            assert!(text.contains("VFR1/frozen-code"));
+            assert!(text.contains("Capture has ended."));
+            assert!(!text.contains("Recovery continues."));
+        }
+    }
     #[test]
     fn fresh_request_with_same_timestamp_resets_shrunken_pages() {
         let old = RequestSnapshot {

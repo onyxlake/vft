@@ -1,0 +1,4 @@
+case,success,elapsed_seconds,verified_bytes,verified_bytes_per_second,processed_captures,valid_frames,invalid_frames,location_scans,location_locks,requested_fps,sha256,request,manual_queued,sender_exit,receiver_exit,termios_restored,observed_display_fps,cpu,memory
+unselected-capture-aborted,false,64.078139,0,0.000,0,0,0,0,0,17,,,,0,1,true,,,
+before-display-fixes,true,37.015039,1048576,28328.378,517,332,23,24,1,17,D8A01F8A1538C5AF49888285F88824683809D3D1CCBA7EAF343BCD82E565604B,VFR1/98FEA9D33E94CE98/245BE5B42FB3C484/1:61/0B94EE96,96,0,0,true,,,
+final-display-fixes,true,32.806207,1048576,31962.732,434,432,2,1,1,17,D8A01F8A1538C5AF49888285F88824683809D3D1CCBA7EAF343BCD82E565604B,VFR1/F7897ABA63A55E77/D1BAB8AABC77F17D/1:64/67F17BE9,100,0,0,true,,,

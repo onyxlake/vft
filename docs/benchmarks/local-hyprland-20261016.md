@@ -74,9 +74,13 @@ No implementation fix was needed during these runs.
 
 ## Remaining acceptance
 
+Subsequent [Kitty TUI checks](linux-tui-20261016.md) add a 1 MiB transfer with manual
+requests, copy-view completion and restored terminal modes. The remaining cases below
+continue to be separate from those terminal-driven checks.
+
 Native robust/repair-only/empty-file tests, deliberate movement/occlusion and
 reacquisition, fractional scaling or transfers across differently scaled monitors,
-manual rectangle selection, portal denial/revocation, TUI/keyboard/fullscreen controls,
+manual rectangle selection, portal denial/revocation, physical keyboard/fullscreen controls,
 large-file runs, other portal backends, Linux/Windows cross-platform screen capture and
 real remote desktop acceptance remain untested. The presence of differently scaled
 monitors in the session does not establish cross-monitor behavior. Existing M14 target

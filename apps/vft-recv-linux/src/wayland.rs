@@ -144,6 +144,36 @@ impl State {
             println!("{}", vft_tui::safe_text(message));
         }
     }
+    fn details(&self) -> Vec<String> {
+        let p = self.decoder.receiver.progress();
+        vec![
+            format!(
+                "Recovered bytes: {}   Rank: {}   Hash: {:?}",
+                p.recovered_bytes, p.rank_symbols, p.hash
+            ),
+            format!(
+                "Processed captures: {}   Valid frames: {}   Invalid: {}   Locks: {}",
+                self.captures, self.valid, self.decoder.invalid, self.decoder.locks
+            ),
+            format!(
+                "Elapsed: {:.1}s   Requested processing FPS: {}",
+                self.start.elapsed().as_secs_f64(),
+                self.options.fps
+            ),
+        ]
+    }
+    fn refresh_view(&self) {
+        let mut v = self.shared.lock().unwrap();
+        v.state = if self.decoder.receiver.is_complete() {
+            Lifecycle::Complete
+        } else {
+            Lifecycle::Running
+        };
+        v.title = String::from("VFT Receive — Wayland portal / PipeWire");
+        v.details = self.details();
+        v.manifest = self.decoder.receiver.manifest().cloned();
+        vft_tui::update_groups(&mut v, &self.decoder.receiver, self.page);
+    }
     fn tick(&mut self, image: Option<LumaImage>) -> Result<bool> {
         if vft_tui::stopped(&self.stop) {
             return Err("capture stopped before verified completion".into());
@@ -189,6 +219,13 @@ impl State {
         }
         if self.decoder.receiver.is_complete() {
             save_verified(&self.decoder.receiver, &self.options.output)?;
+            // Completion must replace the last throttled progress snapshot, including
+            // recovered bytes, hash and incomplete groups. Keep the path in scrollable text.
+            self.refresh_view();
+            self.shared.lock().unwrap().result = format!(
+                "SHA-256 verified; output: {}. Q exits.",
+                vft_tui::safe_text(&self.options.output.display().to_string())
+            );
             self.report(&format!(
                 "COMPLETE SHA-256 verified; output={}",
                 vft_tui::safe_text(&self.options.output.display().to_string())
@@ -196,31 +233,10 @@ impl State {
             return Ok(true);
         }
         if self.last_report.elapsed() >= Duration::from_millis(200) {
-            let p = self.decoder.receiver.progress();
-            let details = vec![
-                format!(
-                    "Recovered bytes: {}   Rank: {}   Hash: {:?}",
-                    p.recovered_bytes, p.rank_symbols, p.hash
-                ),
-                format!(
-                    "Processed captures: {}   Valid frames: {}   Invalid: {}   Locks: {}",
-                    self.captures, self.valid, self.decoder.invalid, self.decoder.locks
-                ),
-                format!(
-                    "Elapsed: {:.1}s   Requested processing FPS: {}",
-                    self.start.elapsed().as_secs_f64(),
-                    self.options.fps
-                ),
-            ];
             if self.options.tui == Some(true) {
-                let mut v = self.shared.lock().unwrap();
-                v.state = Lifecycle::Running;
-                v.title = String::from("VFT Receive — Wayland portal / PipeWire");
-                v.details = details;
-                v.manifest = self.decoder.receiver.manifest().cloned();
-                vft_tui::update_groups(&mut v, &self.decoder.receiver, self.page);
+                self.refresh_view();
             } else if self.last_report.elapsed() >= Duration::from_secs(1) {
-                self.report(&details.join(" | "));
+                self.report(&self.details().join(" | "));
             }
             if self.options.tui == Some(true)
                 || self.last_report.elapsed() >= Duration::from_secs(1)
@@ -343,10 +359,9 @@ pub fn run() -> Result<()> {
         } else {
             Lifecycle::Failed
         };
-        v.result = match &result {
-            Ok(()) => String::from("SHA-256 verified; output saved. Q exits."),
-            Err(e) => e.to_string(),
-        };
+        if let Err(error) = &result {
+            v.result = error.to_string();
+        }
         v.worker_done = true;
         result
     });
@@ -379,5 +394,87 @@ mod tests {
         ] {
             assert!(options(&args.into_iter().map(String::from).collect::<Vec<_>>()).is_err());
         }
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+    #[test]
+    fn completion_publishes_verified_bytes_hash_groups_and_output_without_waiting_for_timer() {
+        use vft_protocol::{Digest, Sha256};
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../output/linux-tui-tests");
+        std::fs::create_dir_all(&root).unwrap();
+        let directory = root.join(format!(
+            "{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let input = directory.join("input.bin");
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&input)
+            .unwrap()
+            .write_all(&[9; 100])
+            .unwrap();
+        let output = directory.join("recovered.bin");
+        let mut sender = vft_linux::open_sender(&input, ProfileId::Balanced).unwrap();
+        let shared = Arc::new(Mutex::new(View::default()));
+        let (_, commands) = mpsc::sync_channel(32);
+        let now = Instant::now();
+        let mut state = State {
+            options: Options {
+                rect: None,
+                search: None,
+                output: output.clone(),
+                preview: None,
+                stats: None,
+                profile: None,
+                fps: 30,
+                timeout: 30,
+                max_file_size: 1000,
+                tui: Some(true),
+            },
+            decoder: Decoder::new(None, None, None, 1000),
+            start: now,
+            last_report: now,
+            captures: 0,
+            valid: 0,
+            preview_saved: false,
+            shared: shared.clone(),
+            stop: Arc::new(AtomicBool::new(false)),
+            commands,
+            page: 0,
+        };
+        assert!(!state
+            .tick(Some(sender.next_frame().unwrap().render(2).unwrap()))
+            .unwrap());
+        state.refresh_view();
+        assert_eq!(shared.lock().unwrap().missing, 1);
+        assert!(shared
+            .lock()
+            .unwrap()
+            .details
+            .join(" ")
+            .contains("Hash: Pending"));
+        assert!(state
+            .tick(Some(sender.next_frame().unwrap().render(2).unwrap()))
+            .unwrap());
+        let view = shared.lock().unwrap();
+        assert_eq!(view.state, Lifecycle::Complete);
+        assert!(view.details.join(" ").contains("Recovered bytes: 100"));
+        assert!(view.details.join(" ").contains("Hash: Verified"));
+        assert_eq!(view.missing, 0);
+        assert!(view.groups.is_empty());
+        assert!(view.result.contains(&output.display().to_string()));
+        assert_eq!(
+            Sha256::digest(std::fs::read(output).unwrap()),
+            Sha256::digest([9; 100])
+        );
     }
 }
