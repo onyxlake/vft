@@ -1,7 +1,8 @@
 # VFT — Visual File Transfer
 
 Simplex file transfer over independent luminance frames. Rust shared libraries, native Windows
-sender/receiver and a browser WASM sender; no network transport or required acknowledgements.
+sender/receiver, Linux Wayland sender/receiver and a browser WASM sender; no network transport
+or required acknowledgements.
 See [the implementation plan](docs/plan.md).
 
 Windows controls now support [manual repair requests and TUI](docs/manual-repair-tui-plan.md).
@@ -11,7 +12,9 @@ Explicit `--tui` requires interactive stdin and stdout. The visual transport sta
 Development scripts require Python 3.9+ and the Rust toolchain, with no Python packages to install.
 Use `python` on Windows or `python3` on Linux if `python` is unavailable. Commands work from any
 working directory. Workspace and browser checks run on both systems; native desktop checks require
-Windows 10/11 and an unlocked interactive desktop. See [development scripts](docs/development.md).
+an unlocked interactive Windows or Linux Wayland desktop, using the platform-specific harness.
+Linux workspace builds also need the [PipeWire development dependencies](docs/linux-wayland.md).
+See [development scripts](docs/development.md).
 
 Build and validate on Windows or Linux:
 
@@ -90,6 +93,20 @@ python scripts/check-tui-cli.py
 An unlocked interactive Windows desktop is required for capture. Sender reads files in bounded
 chunks; the initial receiver retains recovered data in memory, with a 256 MiB default limit.
 No direct network connection, acknowledgements or feedback files are required.
+
+Linux Wayland (see [dependencies, capture coordinates and validation limits](docs/linux-wayland.md)):
+
+```sh
+cargo build --release -p vft-send-linux -p vft-recv-linux
+./target/release/vft-send-linux input.bin --fps 15 --cell-size 4
+./target/release/vft-recv-linux --auto --output recovered.bin
+```
+
+Select the sender window or monitor in the ScreenCast portal picker. Linux uses native
+Wayland software presentation and portal/PipeWire capture, with the same optional TUI
+and manual repair controls. `--rect`/`--search-rect` use selected-stream physical pixels.
+X11 and DMA-BUF-only capture are unsupported. Real Wayland desktop validation is pending;
+headless tests and compilation do not establish physical capture or remote acceptance.
 
 Browser sender (build tools are needed only to create the static distribution):
 

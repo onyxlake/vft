@@ -1,0 +1,18 @@
+[package]
+name = "vft-send-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+vft-linux = { path = "../vft-linux" }
+vft-tui = { path = "../vft-tui" }
+vft-protocol.workspace = true
+vft-sender.workspace = true
+vft-visual.workspace = true
+winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen"] }
+softbuffer = { version = "=0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
+
+[lints]
+workspace = true

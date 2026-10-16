@@ -24,6 +24,9 @@ VFT transfers files through independent visual frames over a simplex channel. Su
 | `crates/vft-testkit` | Seeded simulation and headless integration tooling |
 | `apps/vft-send-win` | File adapter, CLI and native Win32/GDI presentation |
 | `apps/vft-recv-win` | Physical screen capture, CLI, diagnostics and verified file output |
+| `apps/vft-linux` | Shared std file/pixel/recovery adapters for Linux applications |
+| `apps/vft-send-linux` | Native Wayland winit/softbuffer presentation and terminal controls |
+| `apps/vft-recv-linux` | ScreenCast portal/PipeWire capture, discovery and verified output |
 | `apps/vft-send-web` | WASM adapter, bounded Worker File API source and physical-pixel Canvas presentation |
 
 The five protocol/FEC/visual/sender/receiver libraries are `no_std + alloc`. Keep filesystem, OS, capture and UI APIs in adapters. `vft-testkit` may use `std`. Keep Windows dependencies target-specific.
@@ -33,6 +36,10 @@ Respect the workspace's declared Rust version and edition in `Cargo.toml`. A suc
 Phase 1 targets Windows 10/11 x64. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [docs/future-platforms.md](docs/future-platforms.md) before changing portability boundaries.
 
 The user-requested WASM sender is now included. Keep file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
+
+The user-requested Linux Wayland extension is included; see [docs/linux-wayland.md](docs/linux-wayland.md).
+Linux desktop dependencies stay target-specific. Capture coordinates refer to selected-stream
+physical pixels. Real desktop testing requires stopping and asking the user first.
 
 ## Correctness requirements
 

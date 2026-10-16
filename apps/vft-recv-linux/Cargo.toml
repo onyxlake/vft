@@ -1,0 +1,19 @@
+[package]
+name = "vft-recv-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+vft-linux = { path = "../vft-linux" }
+vft-tui = { path = "../vft-tui" }
+vft-protocol.workspace = true
+vft-receiver.workspace = true
+vft-visual.workspace = true
+ashpd = { version = "=0.11.0", default-features = false, features = ["tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
+pipewire = "=0.9.2"
+
+[lints]
+workspace = true

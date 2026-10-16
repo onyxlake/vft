@@ -6,10 +6,12 @@ protocol ← fec
   visual ← sender
     ↑       ↑
     └── Windows sender (file source, SHA-256 scan, Win32/DIB)
+    └── Linux Wayland sender (file source, winit/softbuffer)
     └── WASM sender (Worker FileReaderSync source, SHA-256 scan, Canvas)
 
 protocol + fec → receiver
 visual + receiver → Windows receiver (physical screen rectangle, GDI capture, file output)
+visual + receiver → Linux receiver (ScreenCast portal, PipeWire, verified file output)
 sender + visual + testkit + receiver → headless integration tests
 ```
 
@@ -19,8 +21,8 @@ The only external shared dependency is SHA-256 (`sha2` with default features dis
 Windows APIs are target-specific dependencies of the two applications.
 
 `apps/vft-tui` supplies common English control models, Unicode input editing, bounded logs and a
-Windows-only Ratatui 0.29 / Crossterm 0.28 backend. Cargo.lock pins its transitive dependencies
-and the locked workspace is checked with Rust 1.85. Both apps choose TUI once at startup when
+Windows/Linux Ratatui 0.29 / Crossterm 0.28 backend. Cargo.lock pins its transitive dependencies
+and the locked workspace is checked with Rust 1.85. Native apps choose TUI once at startup when
 stdin and stdout are interactive; `--no-tui` preserves script behavior and explicit `--tui`
 requires both terminals. Help and argument errors remain ordinary text.
 
@@ -74,6 +76,16 @@ discovery DIB. Continuous decoding failure for 750 ms triggers reacquisition whi
 receiver session and recovered generations. Full-desktop searches are paced to a 500 ms minimum
 iteration interval. `--preview` saves one BMP of the first captured/located frame for crop
 diagnostics. Output uses create-new semantics after core SHA verification.
+
+Linux adapter helpers live in `apps/vft-linux`, outside the portable cores. The native
+sender uses a Wayland-only winit loop and softbuffer surface, drawing a centered integer-cell
+frame into the physical inner buffer. The receiver keeps the ScreenCast session and authorized
+PipeWire remote alive through capture, negotiates CPU-mapped packed RGB and hands the latest
+validated luma frame to the existing locator/receiver. FEC/hash/output run after dispatch returns
+from C callbacks, whose errors/panics are contained. Stream size changes invalidate the automatic
+location; reacquisition preserves the manifest and generations. Terminal commands are bounded,
+source reads stay random-access, and output/preview/stats use create-new semantics. See
+[Linux Wayland](linux-wayland.md) for coordinates, system dependencies and pending desktop checks.
 
 API references: [StretchDIBits and bitmap functions](https://learn.microsoft.com/en-us/windows/win32/gdi/bitmap-functions),
 [DPI awareness](https://learn.microsoft.com/en-us/windows/win32/hidpi/setting-the-default-dpi-awareness-for-a-process),

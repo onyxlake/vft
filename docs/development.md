@@ -1,6 +1,6 @@
 # Development on Windows and Linux
 
-The repository's six development entry points use Python 3.9+ and its standard library.
+The repository's development entry points use Python 3.9+ and its standard library.
 No pip packages or PowerShell installation are required. Install Rust/Cargo; browser checks also
 need the `wasm32-unknown-unknown` Rust target and Node.js 22+. On Linux, substitute `python3`
 for `python` when necessary. Script paths below are relative to the repository root; scripts
@@ -11,6 +11,7 @@ resolve their working directory internally, so absolute script paths also work e
 | `python scripts/check.py` | Script regression tests, Rust fmt/check/clippy/test; stops at first failure | Windows, Linux |
 | `python scripts/build-web.py` | Release WASM and six static assets in `output/web-sender/`; `--debug` selects debug WASM | Windows, Linux |
 | `python scripts/check-web.py` | WASM build/lint, JS syntax and actual WASM/native SHA-verified recovery | Windows, Linux |
+| `python scripts/wayland-e2e.py` | Interactive portal selection, local Wayland transfer and independent SHA-256 | Linux Wayland desktop |
 | `python scripts/local-e2e.py` | Local screen capture and independent output hash comparison | Windows desktop |
 | `python scripts/check-tui-cli.py` | Six redirected CLI/TUI probes | Windows desktop |
 | `python scripts/remote-benchmark.py` | Manual-rectangle remote capture and benchmark evidence | Windows desktop |
@@ -30,9 +31,12 @@ python scripts/check-web.py
 python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
 ```
 
-Linux development supports the portable Rust cores, headless tests and browser distribution.
-The native sender/receiver remain Windows adapters. Desktop-only scripts fail before building
-or creating evidence on Linux; this migration adds no Linux GUI or capture adapter. A WASM/native
+Linux development supports the portable Rust cores, headless tests, browser distribution and
+the [native Wayland extension](linux-wayland.md). Building the workspace on Linux now needs
+PipeWire/SPA development packages, pkg-config, a C compiler and libclang. Windows desktop
+scripts still fail before building or creating evidence on Linux; use `wayland-e2e.py` for
+the Linux adapter. It opens a real window and ScreenCast picker and requires user clearance
+before agent-driven desktop testing. Its implementation checkpoint has no physical desktop evidence. A WASM/native
 headless pass does not establish browser screen capture or real remote acceptance.
 
 On an unlocked Windows desktop:

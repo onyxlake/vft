@@ -3,6 +3,9 @@
 用户请求的后续增补：[人工补包与 Windows TUI 实施计划](manual-repair-tui-plan.md)
 （2026-10-02，已实现核心和 Windows TUI；本地验证已记录，真实远程人工操作验收待完成）。原始里程碑与验收记录保持不变。
 
+用户于 2026-10-16 请求增补 Linux Wayland sender/receiver；实施范围与待验收边界见
+[Linux Wayland](linux-wayland.md)。以下保留原始第一阶段范围与里程碑；本次扩展不替代 M14 验收。
+
 ## 1. 项目目标
 
 VFT 是一个以 Rust 为核心实现的单向视觉文件传输协议与工具集。

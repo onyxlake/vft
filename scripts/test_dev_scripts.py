@@ -71,6 +71,19 @@ class DevelopmentScripts(unittest.TestCase):
         with patch("vft_dev.subprocess.run", return_value=result):
             self.assertEqual(vft_dev.target_directory(), Path("custom target"))
 
+    def test_wayland_harness_refuses_missing_desktop_before_build_or_evidence(self):
+        module = load_script("wayland-e2e")
+        for platform, environment in [("win32", {"WAYLAND_DISPLAY": "wayland-0"}), ("linux", {})]:
+            with self.subTest(platform=platform), patch.object(sys, "platform", platform), \
+                    patch.dict(module.os.environ, environment, clear=True), \
+                    patch.object(sys, "argv", ["wayland-e2e.py"]), \
+                    patch.object(module, "run") as command, \
+                    patch.object(module, "evidence_directory") as evidence:
+                with self.assertRaisesRegex(RuntimeError, "interactive Linux Wayland"):
+                    module.check()
+                command.assert_not_called()
+                evidence.assert_not_called()
+
     def test_metadata_failure_keeps_cargo_diagnostics(self):
         error = subprocess.CalledProcessError(101, "cargo", stderr="invalid Cargo configuration\n")
         diagnostics = io.StringIO()

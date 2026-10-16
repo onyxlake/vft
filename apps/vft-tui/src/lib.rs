@@ -1,4 +1,4 @@
-//! Terminal-independent control models; the terminal backend is Windows-only.
+//! Terminal-independent control models and Windows/Linux terminal backend.
 use std::{
     collections::{BTreeSet, VecDeque},
     sync::{
@@ -11,7 +11,7 @@ use vft_protocol::{
     Manifest,
 };
 use vft_receiver::{GenerationProgress, ReceiverSession};
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub mod terminal;
 
 pub fn choose_mode(

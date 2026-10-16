@@ -9,7 +9,7 @@ license.workspace = true
 vft-protocol.workspace = true
 vft-receiver.workspace = true
 
-[target.'cfg(windows)'.dependencies]
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 ratatui = { version = "=0.29.0", default-features = false, features = ["crossterm"] }
 crossterm = "=0.28.1"
 getrandom = "=0.2.17"

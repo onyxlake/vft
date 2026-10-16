@@ -1,0 +1,15 @@
+[package]
+name = "vft-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+vft-protocol.workspace = true
+vft-sender.workspace = true
+vft-receiver.workspace = true
+vft-visual.workspace = true
+
+[lints]
+workspace = true
