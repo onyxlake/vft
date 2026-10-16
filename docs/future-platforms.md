@@ -1,8 +1,8 @@
 # Future platforms and scope
 
-Current implementations: shared Rust libraries, Windows 10/11 x64 applications, and the
+Current implementations: shared Rust libraries, Windows 10/11 x64 applications, the
 user-requested [browser WASM sender](wasm-sender.md), and
-[Linux Wayland sender/receiver](linux-wayland.md) (desktop acceptance pending).
+[Linux Wayland sender/receiver](linux-wayland.md) (initial local Hyprland checks pass).
 No Android adapter, WASM receiver, encryption, multi-file archive, ARQ, network transport, plugin system,
 GPU acceleration, QR/JAB compatibility, or full RaptorQ implementation is included.
 
@@ -10,7 +10,8 @@ Public cores accept bytes, random-access input and normalized luminance grids; p
 can be added without changing the wire format or importing Windows APIs into shared crates.
 
 - Linux Wayland sender: implemented with winit + softbuffer; receiver: portal + PipeWire.
-  Physical desktop and remote acceptance remain pending. X11 fallback is deferred.
+  [Local Hyprland 1 KiB/1 MiB physical capture](benchmarks/local-hyprland-20261016.md) passes;
+  broader desktop scenarios and remote acceptance remain pending. X11 fallback is deferred.
 - WASM sender: implemented with a Worker FileReaderSync adapter and Canvas presentation;
   browser-to-Windows screen capture and real RDP acceptance remain to be recorded.
 - WASM receiver: experimental camera/VideoFrame sampling.

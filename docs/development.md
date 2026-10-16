@@ -36,8 +36,9 @@ the [native Wayland extension](linux-wayland.md). Building the workspace on Linu
 PipeWire/SPA development packages, pkg-config, a C compiler and libclang. Windows desktop
 scripts still fail before building or creating evidence on Linux; use `wayland-e2e.py` for
 the Linux adapter. It opens a real window and ScreenCast picker and requires user clearance
-before agent-driven desktop testing. Its implementation checkpoint has no physical desktop evidence. A WASM/native
-headless pass does not establish browser screen capture or real remote acceptance.
+before agent-driven desktop testing. Its user-approved
+[local Hyprland 1 KiB/1 MiB run](benchmarks/local-hyprland-20261016.md) passes SHA verification.
+A WASM/native headless pass does not establish browser screen capture or real remote acceptance.
 
 On an unlocked Windows desktop:
 

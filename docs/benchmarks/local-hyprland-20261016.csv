@@ -1,0 +1,3 @@
+success,elapsed_seconds,verified_bytes,verified_bytes_per_second,processed_captures,valid_frames,invalid_frames,location_scans,location_locks,requested_fps,sha256,profile,cell_size,sender_requested_fps,join_delay_seconds,transport,observed_display_fps,cpu,memory
+true,6.517364,1024,157.119,64,42,1,2,1,60,96BC8927FC9F5B5D566937A6EBFAFDFD0B9D0394F08D1FB6EF10FB396D08E8AE,balanced,4,30,1,local-wayland,,,
+true,16.283403,1048576,64395.383,630,608,1,2,1,60,D8A01F8A1538C5AF49888285F88824683809D3D1CCBA7EAF343BCD82E565604B,balanced,4,30,1,local-wayland,,,

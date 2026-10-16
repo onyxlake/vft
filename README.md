@@ -105,8 +105,8 @@ cargo build --release -p vft-send-linux -p vft-recv-linux
 Select the sender window or monitor in the ScreenCast portal picker. Linux uses native
 Wayland software presentation and portal/PipeWire capture, with the same optional TUI
 and manual repair controls. `--rect`/`--search-rect` use selected-stream physical pixels.
-X11 and DMA-BUF-only capture are unsupported. Real Wayland desktop validation is pending;
-headless tests and compilation do not establish physical capture or remote acceptance.
+X11 and DMA-BUF-only capture are unsupported. [Local Hyprland 1 KiB/1 MiB transfers](docs/benchmarks/local-hyprland-20261016.md)
+pass independent SHA-256 verification; other desktop scenarios and remote acceptance remain.
 
 Browser sender (build tools are needed only to create the static distribution):
 

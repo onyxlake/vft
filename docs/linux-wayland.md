@@ -129,8 +129,9 @@ The main compiler is Rust 1.94.0; native headers are PipeWire 1.6.9 with libclan
 These are compilation and synthetic recovery results, not desktop evidence.
 
 Real desktop testing must be explicitly cleared by the user before launching either
-application against a desktop. The interactive harness is prepared but **has not been
-run** for this implementation checkpoint:
+application against a desktop. The user cleared the following 1 KiB/1 MiB run on
+2026-10-16; both pass independent SHA-256 on Hyprland 0.56.2. See the
+[configuration, timing, hashes and remaining acceptance](benchmarks/local-hyprland-20261016.md):
 
 ```sh
 python3 scripts/wayland-e2e.py --sizes 1024 1048576 --fps 30 --cell-size 4 --skip-build
@@ -143,8 +144,8 @@ The harness opens the sender and then the portal; the user selects a window/moni
 for each size. It creates unique evidence under ignored `output/`, preserves failed
 logs and previews, compares input/output SHA-256 independently, and stops only children
 it started. Unknown CPU/memory/display FPS fields stay blank. Movement/occlusion and
-TUI interaction need manual testing. A later local pass would establish only local
-Wayland evidence; cross-platform screen transfer and real remote acceptance remain
+TUI interaction need manual testing. The recorded passes establish local Wayland
+evidence for that configuration; cross-platform screen transfer and real remote acceptance remain
 separate from compilation and synthetic recovery. Existing M14 limitations are unchanged.
 
 References: [ScreenCast portal specification](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html),

@@ -21,7 +21,7 @@ Updated 2026-10-16 (Asia/Shanghai). The original scope is preserved in [plan.md]
 | M14 remote desktop | SHA-verified 1 MiB/100 MiB E2E; benchmark matrix partial | [Real RDP gateway lab](benchmarks/remote-rdp-lab-20261002.md): 9/10 windowed 1 MiB cases pass across baseline and netem conditions; repair-only joining passes; 100 MiB passes in 3499.663 s at 29.3 KiB/s. Earlier [user-reported pass](benchmarks/remote-auto-user-reported.md) is retained |
 | Requested WASM sender extension | Implemented; headless compatibility and browser UI checked | Worker bounded FileReaderSync reads, streaming SHA-256, existing core/Canvas, profiles/FPS/DPI/fullscreen/pause; [WASM/native E2E and browser evidence](benchmarks/wasm-sender-20261002.md). Browser-to-Windows physical capture and browser real RDP acceptance remain |
 | Manual repair / Windows TUI extension | Implemented; core, buffer, ConPTY and local screen checks; remote acceptance pending | VFR1 independent vector, generation progress, fair targeted scheduling, default English terminal controls and `--no-tui`; [local evidence and remaining checks](benchmarks/manual-repair-tui-20261002.md) |
-| Requested Linux Wayland extension | Implemented; headless adapter validation; real desktop testing pending user clearance | Native winit/softbuffer sender, ScreenCast portal/PipeWire receiver, shared TUI/manual repair, create-new output/preview/stats, interactive harness; [scope and pending acceptance](linux-wayland.md) |
+| Requested Linux Wayland extension | Implemented; headless and local Hyprland 1 KiB/1 MiB SHA-verified; broader acceptance pending | Native winit/softbuffer sender, ScreenCast portal/PipeWire receiver, shared TUI/manual repair, create-new output/preview/stats, interactive harness; [local Hyprland evidence](benchmarks/local-hyprland-20261016.md) and [remaining acceptance](linux-wayland.md) |
 
 Repository fmt, check, strict clippy and workspace tests pass on Windows x64 with Rust 1.98.1.
 Release binaries and the WASM sender build successfully. The browser adapter also passes native
@@ -34,7 +34,8 @@ WSL; script regressions also pass on Ubuntu. The Python native harness passes lo
 movement/reacquisition, robust manual-crop, empty-file and repair-only joining cases, six redirected
 TUI probes and a local benchmark-launcher smoke test. See [development commands and validation](development.md).
 Those migration measurements used Windows desktop capture. The subsequent Linux Wayland
-extension has no physical capture or remote acceptance evidence yet.
+extension now has [local Hyprland 1 KiB/1 MiB physical capture evidence](benchmarks/local-hyprland-20261016.md);
+Linux remote acceptance remains pending.
 
 Phase 1 has local, user-reported remote and independently executed real RDP SHA-verified evidence.
 The lab records topology, executable/source hashes, actual capture rectangles, CPU/memory and
@@ -66,6 +67,8 @@ The 2026-10-16 Linux Wayland implementation preserves v0 wire/FEC semantics and 
 library portability boundaries. Linux workspace fmt/check/strict Clippy/tests, release build, five-core no-default-features
 check and Rust 1.85 locked all-target compilation pass, separately from historical Windows measurements. Synthetic adapter recovery covers both
 profiles, repair-only joining, loss/reorder/duplicates, pixel stride/bounds, location changes and
-verified create-new output. Local Wayland presentation/capture, portal/backend compatibility,
-fractional DPI, native TUI interactions, cross-platform capture and remote acceptance await real
-desktop testing, which the user requested be paused for approval. No new M14 claim is made.
+verified create-new output. After user approval, local Hyprland 0.56.2 portal/PipeWire
+1 KiB/1 MiB transfers pass independent SHA-256. The 1 MiB run takes 16.283403 s
+at 62.9 KiB/s including portal selection/startup. Broader portal/backend compatibility,
+robust/repair-only/large-file desktop cases, movement/occlusion, fractional DPI, native TUI
+interactions, cross-platform capture and remote acceptance remain. No new M14 claim is made.

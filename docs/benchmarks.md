@@ -1,5 +1,10 @@
 # Measurements
 
+[Local Hyprland Wayland validation](benchmarks/local-hyprland-20261016.md) records
+SHA-verified 1 KiB/1 MiB native Linux desktop transfers on 2026-10-16. The 1 MiB
+run takes 16.283403 s at 62.9 KiB/s including portal selection/startup; this is
+local capture evidence, separate from Windows and real remote desktop measurements.
+
 Browser sender implementation evidence is recorded separately in
 [WASM sender validation](benchmarks/wasm-sender-20261002.md): compiled WASM/native SHA-verified
 recovery, bounded-read/memory observations and browser UI checks. These are not remote goodput results.
