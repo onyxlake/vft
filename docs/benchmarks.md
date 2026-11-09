@@ -1,5 +1,9 @@
 # Measurements
 
+[Native receiver output destinations](benchmarks/receiver-output-20261109.md) records
+Windows 1 KiB/1 MiB SHA-verified physical capture with explicit, metadata-directory and
+current-directory output modes, plus Windows/Linux headless checks on 2026-11-09.
+
 [Local Hyprland Wayland validation](benchmarks/local-hyprland-20261016.md) records
 SHA-verified 1 KiB/1 MiB native Linux desktop transfers on 2026-10-16. The 1 MiB
 run takes 16.283403 s at 62.9 KiB/s including portal selection/startup; this is

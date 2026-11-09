@@ -13,6 +13,14 @@ def transfer(args, directory, target, size):
     from vft_windows import ProcessMetrics, move_sender
     input_path = directory / f"{size}-input.bin"
     output_path = directory / f"{size}-recovered.bin"
+    output_options = ["--output", output_path]
+    receiver_cwd = None
+    if args.output_mode != "explicit":
+        received = directory / "received"
+        received.mkdir(exist_ok=True)
+        output_path = received / input_path.name
+        output_options = ["--output-dir", received] if args.output_mode == "metadata" else []
+        receiver_cwd = received
     rect_path = directory / f"{size}-region.txt"
     stats_path = directory / f"{size}-stats.csv"
     write_fixture(input_path, size)
@@ -35,10 +43,10 @@ def transfer(args, directory, target, size):
         if args.manual_rect:
             capture.extend(rect_path.read_text().split())
         receiver = stack.enter_context(LoggedProcess([
-            executable(target, "vft-recv-win"), *capture, "--no-tui", "--output", output_path,
+            executable(target, "vft-recv-win"), *capture, "--no-tui", *output_options,
             "--fps", "120", "--timeout", args.timeout_seconds, "--stats", stats_path,
             "--preview", directory / f"{size}-preview.bmp",
-        ], directory, f"{size}-receiver"))
+        ], directory, f"{size}-receiver", cwd=receiver_cwd))
         receiver_metrics = stack.enter_context(ProcessMetrics(receiver))
         started = time.monotonic()
         moved = False
@@ -72,7 +80,8 @@ def transfer(args, directory, target, size):
         stats.update(receiver_metrics.values("receiver"))
         stats.update(sha256=actual, requested_fps=args.fps, cell_size=args.cell_size,
                      join_delay_seconds=args.join_delay_seconds, capture_mode=capture_mode,
-                     sender_moved=moved, capture_region=rect_path.read_text().strip())
+                     sender_moved=moved, capture_region=rect_path.read_text().strip(),
+                     output_mode=args.output_mode)
         print(f"PASS size={size} SHA256={actual} goodput={stats['verified_goodput_bytes_per_second']} B/s")
         return stats
 
@@ -90,6 +99,8 @@ def check():
     capture.add_argument("--manual-rect", action="store_true")
     parser.add_argument("--move-sender", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--output-mode", choices=["explicit", "metadata", "current-dir"], default="explicit",
+                        help="receiver destination: explicit file, --output-dir with metadata name, or default working directory")
     args = parser.parse_args()
     if args.move_sender and not args.auto_locate:
         parser.error("--move-sender requires --auto-locate")

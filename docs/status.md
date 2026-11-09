@@ -1,6 +1,16 @@
 # Implementation status
 
-Updated 2026-10-16 (Asia/Shanghai). The original scope is preserved in [plan.md](plan.md).
+Updated 2026-11-09 (Asia/Shanghai). The original scope is preserved in [plan.md](plan.md).
+
+Both native receivers now accept optional `--output-dir DIR` (default: current working
+directory). Without `--output`, the manifest supplies the saved filename. Explicit output
+paths take precedence; directories must exist, unsafe names and diagnostic collisions are
+rejected, and recovered output still requires SHA verification and create-new writes.
+Windows/Linux workspace checks and release builds, plus Windows Rust 1.85 all-target
+compilation, pass.
+Windows 1 KiB/1 MiB physical captures pass independent SHA-256 in all three destination
+modes; the six redirected CLI/TUI probes also pass. See [validation and measurements](benchmarks/receiver-output-20261109.md).
+Linux desktop capture and real remote acceptance were not rerun for this change.
 
 | Milestone | Status | Evidence |
 | --- | --- | --- |

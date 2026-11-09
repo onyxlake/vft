@@ -1,3 +1,6 @@
+#[cfg(any(windows, test))]
+#[path = "../../receiver_output.rs"]
+mod output;
 #[cfg(windows)]
 mod win;
 fn main() {

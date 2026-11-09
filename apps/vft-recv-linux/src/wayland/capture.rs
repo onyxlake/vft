@@ -333,7 +333,7 @@ mod tests {
         let options = super::super::Options {
             rect: None,
             search: None,
-            output: "unused".into(),
+            output: crate::output::OutputDestination::explicit("unused".into()),
             preview: None,
             stats: None,
             profile: None,

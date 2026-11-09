@@ -1,3 +1,6 @@
+#[cfg(any(target_os = "linux", test))]
+#[path = "../../receiver_output.rs"]
+mod output;
 #[cfg(target_os = "linux")]
 mod wayland;
 fn main() {

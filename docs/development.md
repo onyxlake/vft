@@ -46,6 +46,9 @@ On an unlocked Windows desktop:
 python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4
 python scripts/local-e2e.py --sizes 1048576 --fps 60 --cell-size 4 --auto-locate --move-sender
 python scripts/check-tui-cli.py --skip-build
+# Metadata filename in a selected directory, then in the receiver's working directory:
+python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4 --output-mode metadata --skip-build
+python scripts/local-e2e.py --sizes 1024 --fps 60 --cell-size 4 --output-mode current-dir --skip-build
 ```
 
 Native harnesses create unique directories under ignored `output/`, use create-new fixtures,
@@ -53,6 +56,12 @@ logs and result files, and close only the child processes they launch. They reta
 on failures and interruption. Receiver timeouts have an additional 30-second launcher allowance.
 Windows process measurements use ctypes; unavailable measurements remain blank. Movement targets
 only a visible window belonging to the test-owned sender, using physical pixel coordinates.
+
+Both `local-e2e.py` and `wayland-e2e.py` accept `--output-mode explicit|metadata|current-dir`
+(default: `explicit`). Metadata mode creates an isolated receiving directory and supplies
+`--output-dir` without `--output`; current-dir mode launches the receiver in that directory
+with neither output option. Each mode independently compares the recovered file's SHA-256
+with the source. The Linux harness still requires user clearance and portal selection.
 
 New local fixtures use `VFT-python-fixture-v1`: for each 64 KiB chunk starting at byte offset N,
 take the required bytes from SHAKE-256 of ASCII `VFT-python-fixture-v1:N`. This is deterministic

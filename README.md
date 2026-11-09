@@ -58,6 +58,26 @@ Manual `--rect X Y WIDTH HEIGHT` remains available: it must contain only the com
 fullscreen. Robust defaults to 16-pixel binary cells; balanced uses 8-pixel four-level cells.
 Keep the sender visible and the source file unchanged. The receiver refuses to overwrite output.
 
+Both native receivers accept optional `--output-dir DIR` (default: the current working
+directory). Without `--output`, they save using the original filename in the manifest.
+The selected directory must already exist. `--output FILE` takes precedence and uses its
+exact supplied path, even when `--output-dir` is also present; relative explicit paths remain
+relative to the working directory. For example, if the manifest names `photo.png`:
+
+| Receiver options | Destination |
+| --- | --- |
+| `--auto` | `./photo.png` |
+| `--auto --output-dir ./received` | `./received/photo.png` |
+| `--auto --output renamed.png` | `./renamed.png` |
+| `--auto --output-dir ./received --output renamed.png` | `./renamed.png` |
+
+The receiver shows the destination after accepting the manifest and on completion. Unsafe
+metadata filenames, existing destinations and collisions with preview/statistics paths are
+rejected; Windows also rejects device names, invalid characters and trailing dots/spaces.
+Use `--output` to choose a local name when needed. Recovered bytes are written only after
+SHA-256 verification, using create-new semantics. For a local sender and receiver sharing
+a directory, choose a different output directory or an explicit new filename.
+
 In the receiver TUI, use Up/Down and PgUp/PgDn to inspect incomplete groups (numbers start at 1).
 Space selects a group, A selects the page, and C clears selection. R freezes a request snapshot
 for selected groups, or all incomplete groups if none are selected. Capture continues while you

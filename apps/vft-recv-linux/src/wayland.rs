@@ -1,4 +1,5 @@
 mod capture;
+use crate::output::OutputDestination;
 use std::{
     io::{IsTerminal, Write},
     path::PathBuf,
@@ -16,7 +17,7 @@ use vft_visual::{ImageRect, LumaImage};
 struct Options {
     rect: Option<ImageRect>,
     search: Option<ImageRect>,
-    output: PathBuf,
+    output: OutputDestination,
     preview: Option<PathBuf>,
     stats: Option<PathBuf>,
     profile: Option<ProfileId>,
@@ -27,13 +28,13 @@ struct Options {
 }
 fn options(args: &[String]) -> Result<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-recv-linux (--auto | --rect X Y WIDTH HEIGHT) --output FILE\n  [--search-rect X Y WIDTH HEIGHT] [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--max-file-size 268435456]\n  [--preview FILE.bmp] [--stats FILE.csv] [--tui | --no-tui]\nChoose a monitor/window in the ScreenCast portal. Coordinates are selected-stream pixels,\nnot global desktop coordinates. Output, preview and statistics must be new files.");
+        println!("vft-recv-linux (--auto | --rect X Y WIDTH HEIGHT)\n  [--output FILE] [--output-dir DIR]\n  [--search-rect X Y WIDTH HEIGHT] [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--max-file-size 268435456]\n  [--preview FILE.bmp] [--stats FILE.csv] [--tui | --no-tui]\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nChoose a monitor/window in the ScreenCast portal. Coordinates are selected-stream pixels,\nnot global desktop coordinates. Output, preview and statistics must be new, distinct files.");
         return Ok(None);
     }
     let mut o = Options {
         rect: None,
         search: None,
-        output: PathBuf::new(),
+        output: OutputDestination::default(),
         preview: None,
         stats: None,
         profile: None,
@@ -68,7 +69,8 @@ fn options(args: &[String]) -> Result<Option<Options>> {
                     o.search = Some(r);
                 }
             }
-            "--output" => o.output = value()?.into(),
+            "--output" => o.output.file = Some(value()?.into()),
+            "--output-dir" => o.output.directory = value()?.into(),
             "--preview" => o.preview = Some(value()?.into()),
             "--stats" => o.stats = Some(value()?.into()),
             "--profile" => {
@@ -87,40 +89,15 @@ fn options(args: &[String]) -> Result<Option<Options>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if o.output.as_os_str().is_empty()
-        || auto == o.rect.is_some()
+    if auto == o.rect.is_some()
         || (o.search.is_some() && !auto)
         || !(1..=120).contains(&o.fps)
         || o.timeout == 0
     {
-        return Err("supply --output, exactly one of --auto/--rect, FPS 1..120 and positive timeout; --search-rect requires --auto".into());
+        return Err("supply exactly one of --auto/--rect, FPS 1..120 and positive timeout; --search-rect requires --auto".into());
     }
-    let paths: Vec<_> = std::iter::once(&o.output)
-        .chain(o.preview.iter())
-        .chain(o.stats.iter())
-        .collect();
-    let mut resolved = Vec::new();
-    for path in paths {
-        if path.try_exists()? {
-            return Err(format!(
-                "refusing to overwrite {}",
-                vft_tui::safe_text(&path.display().to_string())
-            )
-            .into());
-        }
-        // Resolve parent aliases (./, .., symlinks) without creating any files.
-        let parent = path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(std::path::Path::new("."));
-        let canonical = parent
-            .canonicalize()?
-            .join(path.file_name().ok_or("output path needs a filename")?);
-        if resolved.contains(&canonical) {
-            return Err("output, preview and stats paths must differ".into());
-        }
-        resolved.push(canonical);
-    }
+    o.output
+        .validate(o.preview.as_deref(), o.stats.as_deref())?;
     Ok(Some(o))
 }
 struct State {
@@ -146,7 +123,7 @@ impl State {
     }
     fn details(&self) -> Vec<String> {
         let p = self.decoder.receiver.progress();
-        vec![
+        let mut details = vec![
             format!(
                 "Recovered bytes: {}   Rank: {}   Hash: {:?}",
                 p.recovered_bytes, p.rank_symbols, p.hash
@@ -160,7 +137,14 @@ impl State {
                 self.start.elapsed().as_secs_f64(),
                 self.options.fps
             ),
-        ]
+        ];
+        if let Some(path) = self.options.output.path() {
+            details.push(format!(
+                "Output: {}",
+                vft_tui::safe_text(&path.display().to_string())
+            ));
+        }
+        details
     }
     fn refresh_view(&self) {
         let mut v = self.shared.lock().unwrap();
@@ -203,6 +187,17 @@ impl State {
             let locks = self.decoder.locks;
             if let Some(rect) = self.decoder.push(&image, Instant::now())? {
                 self.valid += 1;
+                if self.options.output.path().is_none() {
+                    if let Some(manifest) = self.decoder.receiver.manifest() {
+                        let path = self.options.output.resolve(
+                            &manifest.filename,
+                            self.options.preview.as_deref(),
+                            self.options.stats.as_deref(),
+                        )?;
+                        let message = format!("Output: {}", path.display());
+                        self.report(&message);
+                    }
+                }
                 if self.decoder.locks != locks {
                     self.report(&format!(
                         "LOCATED stream_rect={} {} {} {}",
@@ -218,17 +213,22 @@ impl State {
             }
         }
         if self.decoder.receiver.is_complete() {
-            save_verified(&self.decoder.receiver, &self.options.output)?;
+            let output = self
+                .options
+                .output
+                .path()
+                .ok_or("missing resolved output path")?;
+            save_verified(&self.decoder.receiver, output)?;
             // Completion must replace the last throttled progress snapshot, including
             // recovered bytes, hash and incomplete groups. Keep the path in scrollable text.
             self.refresh_view();
             self.shared.lock().unwrap().result = format!(
                 "SHA-256 verified; output: {}. Q exits.",
-                vft_tui::safe_text(&self.options.output.display().to_string())
+                vft_tui::safe_text(&output.display().to_string())
             );
             self.report(&format!(
                 "COMPLETE SHA-256 verified; output={}",
-                vft_tui::safe_text(&self.options.output.display().to_string())
+                vft_tui::safe_text(&output.display().to_string())
             ));
             return Ok(true);
         }
@@ -384,9 +384,52 @@ pub fn run() -> Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn output_options_default_to_metadata_and_explicit_paths_override_directories() {
+        let parse =
+            |args: &[&str]| options(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let mut options = parse(&["--auto"]).unwrap().unwrap();
+        assert!(options.output.file.is_none());
+        assert_eq!(
+            options.output.resolve("metadata.bin", None, None).unwrap(),
+            std::env::current_dir()
+                .unwrap()
+                .canonicalize()
+                .unwrap()
+                .join("metadata.bin")
+        );
+        let dir = crate::output::test_directory();
+        let mut options = parse(&["--auto", "--output-dir", dir.to_str().unwrap()])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            options.output.resolve("original.bin", None, None).unwrap(),
+            dir.join("original.bin")
+        );
+        let file = dir.join("renamed.bin");
+        let missing = dir.join("missing");
+        let options = parse(&[
+            "--auto",
+            "--output-dir",
+            missing.to_str().unwrap(),
+            "--output",
+            file.to_str().unwrap(),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(options.output.file.as_deref(), Some(file.as_path()));
+        for args in [
+            vec!["--auto", "--output-dir"],
+            vec!["--auto", "--output-dir", ""],
+            vec!["--auto", "--output", ""],
+            vec!["--auto", "--output-dir", missing.to_str().unwrap()],
+        ] {
+            assert!(parse(&args).is_err());
+        }
+    }
+    #[test]
     fn strict_options_before_portal() {
         for args in [
-            vec!["--auto"],
+            vec!["--auto", "--output-dir", ""],
             vec!["--auto", "--rect", "0", "0", "384", "216", "--output", "f"],
             vec!["--rect", "-1", "0", "384", "216", "--output", "f"],
             vec!["--auto", "--output", "f", "--fps", "0"],
@@ -402,6 +445,14 @@ mod completion_tests {
     use super::*;
     #[test]
     fn completion_publishes_verified_bytes_hash_groups_and_output_without_waiting_for_timer() {
+        completion(false, false);
+    }
+    #[test]
+    fn metadata_completion_uses_the_original_name_and_preserves_a_late_existing_file() {
+        completion(true, false);
+        completion(true, true);
+    }
+    fn completion(metadata: bool, race: bool) {
         use vft_protocol::{Digest, Sha256};
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../output/linux-tui-tests");
         std::fs::create_dir_all(&root).unwrap();
@@ -414,6 +465,7 @@ mod completion_tests {
                 .as_nanos()
         ));
         std::fs::create_dir(&directory).unwrap();
+        let directory = directory.canonicalize().unwrap();
         let input = directory.join("input.bin");
         std::fs::OpenOptions::new()
             .write(true)
@@ -422,24 +474,29 @@ mod completion_tests {
             .unwrap()
             .write_all(&[9; 100])
             .unwrap();
-        let output = directory.join("recovered.bin");
+        let received = directory.join("received");
+        std::fs::create_dir(&received).unwrap();
+        let output = received.join(if metadata {
+            "input.bin"
+        } else {
+            "recovered.bin"
+        });
+        let mut args = vec![
+            "--auto".into(),
+            "--output-dir".into(),
+            received.to_str().unwrap().into(),
+        ];
+        if !metadata {
+            args.extend(["--output".into(), output.to_str().unwrap().into()]);
+        }
+        let mut options = options(&args).unwrap().unwrap();
+        options.tui = Some(true);
         let mut sender = vft_linux::open_sender(&input, ProfileId::Balanced).unwrap();
         let shared = Arc::new(Mutex::new(View::default()));
         let (_, commands) = mpsc::sync_channel(32);
         let now = Instant::now();
         let mut state = State {
-            options: Options {
-                rect: None,
-                search: None,
-                output: output.clone(),
-                preview: None,
-                stats: None,
-                profile: None,
-                fps: 30,
-                timeout: 30,
-                max_file_size: 1000,
-                tui: Some(true),
-            },
+            options,
             decoder: Decoder::new(None, None, None, 1000),
             start: now,
             last_report: now,
@@ -455,6 +512,13 @@ mod completion_tests {
             .tick(Some(sender.next_frame().unwrap().render(2).unwrap()))
             .unwrap());
         state.refresh_view();
+        assert!(!output.exists());
+        assert!(shared
+            .lock()
+            .unwrap()
+            .details
+            .join(" ")
+            .contains(&output.display().to_string()));
         assert_eq!(shared.lock().unwrap().missing, 1);
         assert!(shared
             .lock()
@@ -462,6 +526,21 @@ mod completion_tests {
             .details
             .join(" ")
             .contains("Hash: Pending"));
+        if race {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&output)
+                .unwrap()
+                .write_all(b"keep existing")
+                .unwrap();
+            assert!(state
+                .tick(Some(sender.next_frame().unwrap().render(2).unwrap()))
+                .is_err());
+            assert_eq!(std::fs::read(output).unwrap(), b"keep existing");
+            assert_ne!(shared.lock().unwrap().state, Lifecycle::Complete);
+            return;
+        }
         assert!(state
             .tick(Some(sender.next_frame().unwrap().render(2).unwrap()))
             .unwrap());

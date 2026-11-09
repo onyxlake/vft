@@ -18,6 +18,14 @@ def require_wayland():
 def transfer(args, directory, target, size):
     source = directory / f"{size}-input.bin"
     output = directory / f"{size}-recovered.bin"
+    output_options = ["--output", output]
+    receiver_cwd = None
+    if args.output_mode != "explicit":
+        received = directory / "received"
+        received.mkdir(exist_ok=True)
+        output = received / source.name
+        output_options = ["--output-dir", received] if args.output_mode == "metadata" else []
+        receiver_cwd = received
     stats = directory / f"{size}-stats.csv"
     write_fixture(source, size)
     with ExitStack() as stack:
@@ -30,10 +38,10 @@ def transfer(args, directory, target, size):
             raise RuntimeError(f"Sender exited; diagnostics: {directory}")
         print("In the portal, select the VFT sender window or its monitor. Keep the frame visible.", flush=True)
         receiver = stack.enter_context(LoggedProcess([
-            executable(target, "vft-recv-linux"), "--auto", "--no-tui", "--output", output,
+            executable(target, "vft-recv-linux"), "--auto", "--no-tui", *output_options,
             "--fps", "60", "--timeout", args.timeout_seconds, "--stats", stats,
             "--preview", directory / f"{size}-preview.bmp",
-        ], directory, f"{size}-receiver"))
+        ], directory, f"{size}-receiver", cwd=receiver_cwd))
         started = time.monotonic()
         while True:
             try:
@@ -54,7 +62,8 @@ def transfer(args, directory, target, size):
             raise RuntimeError("Receiver did not record verified auto-location success")
         row.update(sha256=digest, profile=args.profile, cell_size=args.cell_size,
                    sender_requested_fps=args.fps, join_delay_seconds=args.join_delay_seconds,
-                   transport="local-wayland", observed_display_fps="", cpu="", memory="")
+                   transport="local-wayland", observed_display_fps="", cpu="", memory="",
+                   output_mode=args.output_mode)
         print(f"PASS size={size} SHA256={digest} goodput={row['verified_bytes_per_second']} B/s", flush=True)
         return row
 
@@ -68,6 +77,8 @@ def check():
     parser.add_argument("--timeout-seconds", type=positive, default=300)
     parser.add_argument("--join-delay-seconds", type=nonnegative, default=1)
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--output-mode", choices=["explicit", "metadata", "current-dir"], default="explicit",
+                        help="receiver destination: explicit file, --output-dir with metadata name, or default working directory")
     args = parser.parse_args()
     if len(set(args.sizes)) != len(args.sizes):
         parser.error("--sizes must not contain duplicates")

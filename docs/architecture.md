@@ -77,6 +77,14 @@ receiver session and recovered generations. Full-desktop searches are paced to a
 iteration interval. `--preview` saves one BMP of the first captured/located frame for crop
 diagnostics. Output uses create-new semantics after core SHA verification.
 
+Both native receivers include the std-only `apps/receiver_output.rs` module for destination
+validation, outside the portable cores. `--output-dir` defaults to the current working
+directory; without an explicit `--output`, the accepted manifest supplies the filename.
+The directory must exist. Explicit output paths take precedence and retain their supplied
+meaning. Resolution rejects unsafe metadata names, existing destinations and aliases of
+preview/statistics paths, and is reported before recovered output is written. Final file
+creation still uses create-new after SHA verification to protect against later collisions.
+
 Linux adapter helpers live in `apps/vft-linux`, outside the portable cores. The native
 sender uses a Wayland-only winit loop and softbuffer surface, drawing a centered integer-cell
 frame into the physical inner buffer. The receiver keeps the ScreenCast session and authorized

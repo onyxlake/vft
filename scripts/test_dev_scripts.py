@@ -167,6 +167,13 @@ class DevelopmentScripts(unittest.TestCase):
             self.assertEqual(process.wait(timeout=15), 7)
         self.assertEqual((self.directory / "arguments.log").read_text().strip(), argument)
 
+    def test_logged_process_can_use_an_isolated_receiver_working_directory(self):
+        with vft_dev.LoggedProcess([sys.executable, "-c", "import os; print(os.getcwd())"],
+                                   self.directory, "receiver-cwd", cwd=self.directory) as process:
+            self.assertEqual(process.wait(timeout=15), 0)
+        actual = Path((self.directory / "receiver-cwd.log").read_text().strip())
+        self.assertEqual(actual.resolve(), self.directory.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

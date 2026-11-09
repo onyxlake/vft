@@ -100,10 +100,11 @@ def write_csv(path, rows):
 class LoggedProcess:
     """Own only the child we launch, keeping logs on failure and interruption."""
 
-    def __init__(self, command, directory, name):
+    def __init__(self, command, directory, name, *, cwd=None):
         self.command = list(map(str, command))
         self.directory = directory
         self.name = name
+        self.cwd = ROOT if cwd is None else cwd
 
     def __enter__(self):
         self.stdout = (self.directory / f"{self.name}.log").open("xb")
@@ -117,7 +118,7 @@ class LoggedProcess:
                     startup.wShowWindow = 0  # Hide console helpers; sender explicitly shows its GUI.
                     options["startupinfo"] = startup
                 self.process = subprocess.Popen(
-                    self.command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                    self.command, cwd=self.cwd, stdin=subprocess.DEVNULL,
                     stdout=self.stdout, stderr=self.stderr, **options,
                 )
             except BaseException:

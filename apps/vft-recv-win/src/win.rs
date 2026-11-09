@@ -1,3 +1,4 @@
+use crate::output::OutputDestination;
 use std::io::IsTerminal;
 use std::sync::{
     atomic::AtomicBool,
@@ -8,7 +9,7 @@ use std::{
     ffi::c_void,
     fs::OpenOptions,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     ptr::NonNull,
     time::{Duration, Instant},
 };
@@ -56,7 +57,7 @@ struct Options {
     sender_window: bool,
     auto: bool,
     search_rect: Option<Region>,
-    output: PathBuf,
+    output: OutputDestination,
     profile: Option<ProfileId>,
     fps: u32,
     timeout: u64,
@@ -70,7 +71,7 @@ fn options() -> AppResult<Option<Options>> {
 }
 fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
-        println!("vft-recv-win (--auto | --rect X Y WIDTH HEIGHT | --sender-window) --output FILE\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
+        println!("vft-recv-win (--auto | --rect X Y WIDTH HEIGHT | --sender-window)\n  [--output FILE] [--output-dir DIR]\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n  [--tui | --no-tui] (interactive terminals default to TUI)\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nOutput, preview and statistics must be new, distinct files.\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
         return Ok(None);
     }
     let mut out = Options {
@@ -79,7 +80,7 @@ fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
         sender_window: false,
         auto: false,
         search_rect: None,
-        output: PathBuf::new(),
+        output: OutputDestination::default(),
         profile: None,
         fps: 30,
         timeout: 3600,
@@ -115,7 +116,8 @@ fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
             }
             "--sender-window" => out.sender_window = true,
             "--auto" => out.auto = true,
-            "--output" => out.output = PathBuf::from(value()?),
+            "--output" => out.output.file = Some(PathBuf::from(value()?)),
+            "--output-dir" => out.output.directory = PathBuf::from(value()?),
             "--profile" => {
                 out.profile = match value()? {
                     "auto" => None,
@@ -132,32 +134,18 @@ fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if out.output.as_os_str().is_empty()
-        || usize::from(out.rect.is_some()) + usize::from(out.sender_window) + usize::from(out.auto)
-            != 1
+    if usize::from(out.rect.is_some()) + usize::from(out.sender_window) + usize::from(out.auto) != 1
         || (out.search_rect.is_some() && !out.auto)
         || !(1..=120).contains(&out.fps)
         || out.timeout == 0
     {
         return Err(
-            "supply --output and exactly one of --auto/--rect/--sender-window, FPS 1..120 and positive timeout; --search-rect requires --auto"
+            "supply exactly one of --auto/--rect/--sender-window, FPS 1..120 and positive timeout; --search-rect requires --auto"
                 .into(),
         );
     }
-    if out.output.exists() {
-        return Err("output already exists; refusing to overwrite".into());
-    }
-    if out.stats.as_ref().is_some_and(|p| p.exists())
-        || out.preview.as_ref().is_some_and(|p| p.exists())
-    {
-        return Err("stats or preview already exists; choose a new path".into());
-    }
-    if out.stats.as_ref() == Some(&out.output)
-        || out.preview.as_ref() == Some(&out.output)
-        || (out.stats.is_some() && out.stats == out.preview)
-    {
-        return Err("output, stats and preview paths must differ".into());
-    }
+    out.output
+        .validate(out.preview.as_deref(), out.stats.as_deref())?;
     Ok(Some(out))
 }
 
@@ -433,7 +421,7 @@ fn warn(ui: Option<&ReceiveUi>, message: String) {
         eprintln!("{message}");
     }
 }
-fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
+fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
@@ -523,6 +511,12 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
                         metrics.location_locks
                     ),
                 ];
+                if let Some(path) = options.output.path() {
+                    v.details.push(format!(
+                        "Output: {}",
+                        vft_tui::safe_text(&path.display().to_string())
+                    ));
+                }
                 previous = (
                     metrics.captures,
                     metrics.unique_frames,
@@ -656,6 +650,20 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
                     Err(error) => warn(ui, format!("Rejected packet: {error}")),
                 }
                 if let Some(manifest) = receiver.manifest() {
+                    if options.output.path().is_none() {
+                        let path = options.output.resolve(
+                            &manifest.filename,
+                            options.preview.as_deref(),
+                            options.stats.as_deref(),
+                        )?;
+                        report(
+                            ui,
+                            format!(
+                                "Output: {}",
+                                vft_tui::safe_text(&path.display().to_string())
+                            ),
+                        );
+                    }
                     if selected.is_none() {
                         report(
                             ui,
@@ -690,7 +698,11 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
             }
         }
         if receiver.is_complete() {
-            save_verified(&receiver, &options.output)
+            let output = options
+                .output
+                .path()
+                .ok_or("missing resolved output path")?;
+            save_verified(&receiver, output)
                 .map_err(|e| format!("Verified output creation/write failed: {e}"))?;
             save_stats(&options, &receiver, &metrics, start.elapsed())?;
             let elapsed = start.elapsed().as_secs_f64();
@@ -700,7 +712,7 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
                 vft_tui::update_groups(&mut v, &receiver, 0);
                 v.result = format!(
                     "Complete - SHA-256 verified and saved to {}",
-                    options.output.display()
+                    vft_tui::safe_text(&output.display().to_string())
                 );
                 v.details = vec![
                     v.result.clone(),
@@ -711,8 +723,8 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
                     ),
                 ];
             }
-            report(ui, format!("COMPLETE sha256=verified bytes={} elapsed={elapsed:.3}s goodput={:.1} KiB/s progress={:?} invalid_frames={}",
-                receiver.progress().recovered_bytes,receiver.progress().recovered_bytes as f64/elapsed/1024.0,receiver.progress(),metrics.invalid_frames));
+            report(ui, format!("COMPLETE sha256=verified bytes={} elapsed={elapsed:.3}s goodput={:.1} KiB/s progress={:?} invalid_frames={} output={}",
+                receiver.progress().recovered_bytes,receiver.progress().recovered_bytes as f64/elapsed/1024.0,receiver.progress(),metrics.invalid_frames,vft_tui::safe_text(&output.display().to_string())));
             return Ok(());
         }
         if last_report.elapsed() >= Duration::from_secs(1) {
@@ -731,7 +743,7 @@ fn run_capture(options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
         std::thread::sleep(interval.saturating_sub(iteration.elapsed()));
     }
 }
-fn save_verified(receiver: &ReceiverSession, path: &PathBuf) -> AppResult<()> {
+fn save_verified(receiver: &ReceiverSession, path: &Path) -> AppResult<()> {
     let chunks = receiver.verified_chunks()?;
     let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     for chunk in chunks {
@@ -773,6 +785,115 @@ fn save_stats(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn output_options_default_to_metadata_and_explicit_paths_override_directories() {
+        let parse =
+            |args: &[&str]| parse_options(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let mut options = parse(&["--auto"]).unwrap().unwrap();
+        assert!(options.output.file.is_none());
+        assert_eq!(
+            options.output.resolve("metadata.bin", None, None).unwrap(),
+            std::env::current_dir()
+                .unwrap()
+                .canonicalize()
+                .unwrap()
+                .join("metadata.bin")
+        );
+        let dir = crate::output::test_directory();
+        let dir_text = dir.to_str().unwrap();
+        let mut options = parse(&["--auto", "--output-dir", dir_text])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            options.output.resolve("original.bin", None, None).unwrap(),
+            dir.join("original.bin")
+        );
+        let file = dir.join("renamed.bin");
+        let missing = dir.join("missing");
+        let options = parse(&[
+            "--auto",
+            "--output-dir",
+            missing.to_str().unwrap(),
+            "--output",
+            file.to_str().unwrap(),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(options.output.file.as_deref(), Some(file.as_path()));
+        for args in [
+            vec!["--auto", "--output-dir"],
+            vec!["--auto", "--output-dir", ""],
+            vec!["--auto", "--output", ""],
+            vec!["--auto", "--output-dir", missing.to_str().unwrap()],
+        ] {
+            assert!(parse(&args).is_err());
+        }
+    }
+
+    #[test]
+    fn metadata_output_requires_verified_bytes_and_never_overwrites_a_late_file() {
+        use vft_protocol::{Digest, Manifest, Sha256, SymbolId};
+        for race in [false, true] {
+            let dir = crate::output::test_directory();
+            let args = vec![
+                "--auto".into(),
+                "--output-dir".into(),
+                dir.to_str().unwrap().into(),
+            ];
+            let mut options = parse_options(&args).unwrap().unwrap();
+            let manifest = Manifest {
+                session: [1; 16],
+                object: [2; 16],
+                filename: "original.bin".into(),
+                file_size: 1,
+                sha256: Sha256::digest([9]).into(),
+                symbol_size: 1,
+                source_symbols: 1,
+                profile: ProfileId::Balanced,
+            };
+            let mut packet = Packet {
+                session: manifest.session,
+                object: manifest.object,
+                profile: manifest.profile,
+                kind: PacketType::Manifest,
+                symbol: SymbolId {
+                    generation: 0,
+                    index: 0,
+                },
+                payload: manifest.encode().unwrap(),
+            };
+            let mut receiver = ReceiverSession::default();
+            receiver.push_packet(&packet.encode().unwrap()).unwrap();
+            let path = options
+                .output
+                .resolve(&receiver.manifest().unwrap().filename, None, None)
+                .unwrap();
+            assert!(save_verified(&receiver, path).is_err());
+            assert!(!path.exists());
+            if race {
+                OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(path)
+                    .unwrap()
+                    .write_all(b"keep existing")
+                    .unwrap();
+            }
+            packet.kind = PacketType::SourceSymbol;
+            packet.payload = vec![9];
+            receiver.push_packet(&packet.encode().unwrap()).unwrap();
+            assert!(receiver.is_complete());
+            if race {
+                assert!(save_verified(&receiver, path).is_err());
+                assert_eq!(std::fs::read(path).unwrap(), b"keep existing");
+            } else {
+                save_verified(&receiver, path).unwrap();
+                assert_eq!(std::fs::read(path).unwrap(), [9]);
+                assert!(save_verified(&receiver, path).is_err());
+            }
+        }
+    }
+
     #[test]
     fn auto_capture_options_are_exclusive_and_search_is_optional() {
         let output = std::env::temp_dir().join(format!(
@@ -841,7 +962,7 @@ mod tests {
             sender_window: true,
             auto: false,
             search_rect: None,
-            output: path.clone(),
+            output: OutputDestination::explicit(path.clone()),
             profile: None,
             fps: 30,
             timeout: 1,

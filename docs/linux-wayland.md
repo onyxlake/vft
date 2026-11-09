@@ -31,6 +31,14 @@ Diagnostic directories must already exist. Output, stats and preview paths must 
 new and distinct; no file is silently overwritten. All filenames printed in terminal
 controls are escaped for control characters.
 
+`--output FILE` is optional. Without it, the receiver saves the original manifest filename
+in `--output-dir DIR`, which defaults to the current working directory and must already
+exist. An explicit `--output` always uses its supplied path and overrides `--output-dir`;
+a relative explicit path stays relative to the working directory. The resolved destination
+appears in CLI/TUI progress and completion. Unsafe metadata filenames, existing destinations
+and collisions with preview/statistics files are rejected. These are adapter-only changes;
+the wire format and SHA-verified create-new output contract are unchanged.
+
 ## Presentation
 
 The sender hashes an open regular file in 64 KiB chunks, then reads through
