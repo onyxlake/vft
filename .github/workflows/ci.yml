@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  RUST_BACKTRACE: '1'
+
+jobs:
+  native:
+    name: Native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            artifact: vft-windows-x86_64
+          - os: ubuntu-24.04
+            artifact: vft-linux-x86_64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y build-essential pkg-config libclang-dev libpipewire-0.3-dev libspa-0.2-dev
+      - name: Install the repository Rust toolchain
+        # Rustup reads the version, components and targets from rust-toolchain.toml.
+        run: rustup show active-toolchain
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: native-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+      - name: Fetch locked dependencies
+        run: cargo fetch --locked
+      - name: Check workspace
+        run: python scripts/check.py
+      - name: Check shared cores without default features
+        run: cargo check --locked -p vft-protocol -p vft-fec -p vft-visual -p vft-sender -p vft-receiver --no-default-features
+      - name: Build release binaries
+        run: cargo build --release --workspace --locked
+      - name: Check for generated source changes
+        run: git diff --exit-code
+      - name: Package native sender and receiver
+        shell: python
+        run: |
+          import sys
+          import tarfile
+          import zipfile
+
+          sys.path.insert(0, 'scripts')
+          from vft_dev import ROOT, target_directory
+
+          windows = sys.platform == 'win32'
+          platform = 'windows' if windows else 'linux'
+          suffix = '-win.exe' if windows else '-linux'
+          binaries = target_directory() / 'release'
+          files = [(binaries / f'vft-{kind}{suffix}', f'vft-{kind}{suffix}')
+                   for kind in ('send', 'recv')]
+          files += [(ROOT / name, name) for name in ('README.md', 'LICENSE')]
+          files += [(path, path.relative_to(ROOT).as_posix())
+                    for path in sorted((ROOT / 'docs').glob('*.md'))]
+          for path, _ in files:
+              if not path.is_file():
+                  raise FileNotFoundError(path)
+
+          destination = ROOT / 'output' / 'release'
+          destination.mkdir(parents=True, exist_ok=True)
+          name = f'vft-{platform}-x86_64'
+          if windows:
+              with zipfile.ZipFile(destination / f'{name}.zip', 'x', zipfile.ZIP_DEFLATED) as archive:
+                  for path, member in files:
+                      archive.write(path, member)
+          else:
+              with (destination / f'{name}.tar.gz').open('xb') as output:
+                  with tarfile.open(fileobj=output, mode='w:gz') as archive:
+                      for path, member in files:
+                          archive.add(path, arcname=member)
+      - name: Upload native build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.artifact }}
+          path: output/release/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  web:
+    name: WASM and web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Install the repository Rust toolchain
+        run: rustup show active-toolchain
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: web-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+      - name: Fetch locked dependencies
+        run: cargo fetch --locked
+      - name: Check shared cores on WASM
+        run: cargo check --locked --target wasm32-unknown-unknown -p vft-protocol -p vft-fec -p vft-visual -p vft-sender -p vft-receiver --no-default-features
+      - name: Check WASM and packaged web recovery
+        run: python scripts/check-web.py
+      - name: Check for generated source changes
+        run: git diff --exit-code
+      - name: Package WASM and self-contained HTML
+        shell: python
+        run: |
+          import shutil
+          import sys
+
+          sys.path.insert(0, 'scripts')
+          from vft_dev import ROOT, target_directory
+          from web_licenses import collect_notices
+
+          destination = ROOT / 'output' / 'release'
+          destination.mkdir(parents=True, exist_ok=True)
+          files = [
+              (ROOT / 'output' / 'web-sender' / 'index.html', 'web-index.html'),
+              (target_directory() / 'wasm32-unknown-unknown' / 'release' / 'vft_send_web.wasm',
+               'vft_send_web.wasm'),
+          ]
+          for source, name in files:
+              with source.open('rb') as input_file, (destination / name).open('xb') as output:
+                  shutil.copyfileobj(input_file, output)
+          with (destination / 'web-THIRD-PARTY-NOTICES.txt').open('x', encoding='utf-8') as output:
+              output.write(collect_notices(ROOT))
+      - name: Upload web build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vft-web
+          path: output/release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish tagged release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [native, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified build artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: vft-*
+          merge-multiple: true
+          path: output/release
+      - name: Publish assets and checksums
+        working-directory: output/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -o noclobber
+          assets=(vft-windows-x86_64.zip vft-linux-x86_64.tar.gz vft_send_web.wasm web-index.html web-THIRD-PARTY-NOTICES.txt)
+          sha256sum "${assets[@]}" > SHA256SUMS.txt
+          options=(--verify-tag --generate-notes --title "$RELEASE_TAG")
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            options+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "${assets[@]}" SHA256SUMS.txt "${options[@]}"

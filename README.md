@@ -116,5 +116,7 @@ Esc/Space/F11 controls and must remain clear of the terminal. See [terminal cont
 Run `python scripts/check.py` for Python regressions and Rust format/check/Clippy/tests.
 With Node.js 22+ installed, `python scripts/check-web.py` also checks packaged WASM/native recovery.
 Desktop tests use separate platform-specific scripts described in the development guide.
+GitHub Actions checks PRs and master builds; `v*` tags publish native, WASM and single-file HTML
+releases. See [CI artifacts, releases and dependency updates](docs/development.md#github-ci-and-releases).
 
 VFT is licensed under the [MIT license](LICENSE).

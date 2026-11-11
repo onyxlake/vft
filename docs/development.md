@@ -55,6 +55,47 @@ The native visual/receiver cores render, sample and recover its frames, then ind
 bytes and SHA-256. This is a headless check; browser UI and physical capture need separate testing.
 See [browser requirements and packaging](wasm-sender.md) for distributing the generated HTML.
 
+## GitHub CI and releases
+
+The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `master`,
+`v*` tags and manual dispatch. It uses the exact toolchain in `rust-toolchain.toml`.
+Windows Server 2022 x64 and Ubuntu 24.04 x64 runners execute `scripts/check.py`, check the
+shared cores without default features and build the workspace in release mode. A separate
+Ubuntu job checks the cores on WASM and runs `scripts/check-web.py` with Node.js 22.
+These are build and headless checks; they do not exercise desktop capture, portal selection,
+browser UI or real remote transfer.
+
+Successful jobs retain these downloadable Actions artifacts for 14 days:
+
+| Artifact | Contents |
+| --- | --- |
+| `vft-windows-x86_64` | `vft-windows-x86_64.zip`: `vft-send-win.exe`, `vft-recv-win.exe`, README, license and technical guides |
+| `vft-linux-x86_64` | `vft-linux-x86_64.tar.gz`: `vft-send-linux`, `vft-recv-linux`, README, license and technical guides; executable permissions preserved |
+| `vft-web` | `web-index.html`, raw `vft_send_web.wasm` and `web-THIRD-PARTY-NOTICES.txt` |
+
+`web-index.html` is the generated self-contained `index.html` renamed for download; open it
+directly in a browser. It already embeds WASM and license notices. The separate WASM file is
+for integrations using the [documented ABI](wasm-sender.md#adapter-and-abi); retain its companion
+notices when redistributing it. Native packages still need the documented Windows VC++ runtime
+or [Linux runtime dependencies](linux-wayland.md#build-and-runtime-requirements). Linux binaries
+are built on Ubuntu 24.04 and are not static or universally portable to older distributions.
+
+Master builds publish Actions artifacts only. Pushing a tag such as `v0.1.0` creates a GitHub
+Release **after both native jobs and the web job pass**, attaching the two native archives,
+the three web files and `SHA256SUMS.txt`. Tags containing a hyphen (for example `v0.1.0-rc.1`)
+publish prereleases. Existing releases/assets are not overwritten; a rerun against an already
+published tag fails. Only the release job receives `contents: write`; PR jobs use read-only
+repository permissions and do not need secrets.
+
+The workflows require a GitHub repository with Actions enabled; committing them to a different
+Git host does not activate GitHub Actions. Set `master` as the GitHub default branch.
+[Dependabot](../.github/dependabot.yml) checks Cargo and pinned GitHub Actions every Monday at
+09:00 Asia/Shanghai and opens PRs against the default branch. Cargo minor/patch updates are
+grouped, major updates remain separate, and Actions updates form one group. Updates run the
+same PR checks and require normal review; automatic merging is not configured. To require CI
+before merging, add `Native (windows-2022)`, `Native (ubuntu-24.04)` and `WASM and web` as required
+checks in the repository's branch rules.
+
 ## Desktop tests
 
 Linux development supports the portable Rust cores, headless tests, browser distribution and
