@@ -1,7 +1,7 @@
 # Local Hyprland Wayland validation — 2026-10-16
 
-Two real local desktop transfers pass on the user's Hyprland session after explicit
-permission to run the 1 KiB/1 MiB test. Both recovered files independently match the
+Two real local desktop transfers, 1 KiB and 1 MiB, passed on Hyprland.
+Both recovered files independently match the
 source SHA-256, in addition to receiver-core verification. This establishes local
 Wayland software presentation, ScreenCast portal/PipeWire capture and automatic grid
 discovery for this configuration. It adds no remote acceptance evidence.
@@ -9,7 +9,7 @@ discovery for this configuration. It adds no remote acceptance evidence.
 ## Configuration
 
 - Source revision: `4b420ab` (`feat(linux): add Wayland sender and portal receiver`).
-  Release binaries were built and checked at that implementation checkpoint.
+  Release binaries were built and checked at that revision.
 - Hyprland `0.56.2`, commit `efb50993780079460b0cbed1363e2166a2de1d9f`.
 - Arch packages: `xdg-desktop-portal 1.22.1-2`,
   `xdg-desktop-portal-hyprland 1.4.1-2`, `pipewire 1:1.6.9-1`.
@@ -83,5 +83,5 @@ reacquisition, fractional scaling or transfers across differently scaled monitor
 manual rectangle selection, portal denial/revocation, physical keyboard/fullscreen controls,
 large-file runs, other portal backends, Linux/Windows cross-platform screen capture and
 real remote desktop acceptance remain untested. The presence of differently scaled
-monitors in the session does not establish cross-monitor behavior. Existing M14 target
+monitors in the session does not establish cross-monitor behavior. Existing remote target
 and sustained-throughput limitations are unchanged.

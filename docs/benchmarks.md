@@ -1,5 +1,11 @@
 # Measurements
 
+These are dated records of specific revisions and environments. Their historical toolchains,
+commands and artifact sizes do not describe every later build; use the [current build guide](development.md)
+and [dependency baseline](dependencies.md) for current requirements. Small CSV records and hashes
+are committed here. Raw fixtures, captures and logs under ignored `output/` are local evidence,
+not files included in a fresh clone.
+
 [Native receiver output destinations](benchmarks/receiver-output-20261109.md) records
 Windows 1 KiB/1 MiB SHA-verified physical capture with explicit, metadata-directory and
 current-directory output modes, plus Windows/Linux headless checks on 2026-11-09.
@@ -11,9 +17,13 @@ local capture evidence, separate from Windows and real remote desktop measuremen
 [Linux Kitty TUI validation](benchmarks/linux-tui-20261016.md) records an additional
 SHA-verified 1 MiB transfer, repair-request controls, terminal restoration and display fixes.
 
-Browser sender implementation evidence is recorded separately in
+Browser sender evidence is recorded separately in
 [WASM sender validation](benchmarks/wasm-sender-20261002.md): compiled WASM/native SHA-verified
-recovery, bounded-read/memory observations and browser UI checks. These are not remote goodput results.
+recovery, bounded-read/memory observations and browser UI checks. Later
+[single-file demo checks](benchmarks/web-demo-20261111.md) cover offline Chromium/Firefox operation.
+These are not remote goodput results.
+
+## Local Windows screen capture
 
 Measured 2026-09-30 on Windows x64 (`10.0.26200.0`), Rust 1.98.1, release build, with separate
 native sender/receiver processes and actual screen capture. These are **local desktop** results.
@@ -81,7 +91,7 @@ configuration. It does not invent unknown video bitrate, codec, sender CPU, or f
 
 ## Automatic location and capture-mode regression
 
-Additional local release runs validate the new visual locator, with independent input/output
+Additional local release runs validate the visual locator, with independent input/output
 SHA-256 comparisons. These are functionality checks, not repeated throughput benchmarks:
 
 | Capture mode | Input / profile | Verified time | Location scans / locks | Result |

@@ -1,7 +1,7 @@
 # Browser WASM sender
 
-The user-requested browser sender extends the original Windows scope. It emits unchanged VFT v0
-frames and uses the same standard robust/balanced profiles and deterministic sender schedule.
+The browser sender emits VFT v0 frames using the standard robust/balanced profiles and
+deterministic sender schedule.
 The existing Windows receiver can use `--auto` or an exact physical-pixel `--rect` around its Canvas.
 `--sender-window` identifies the native Windows sender and does not apply to a browser.
 
@@ -26,7 +26,7 @@ browser fullscreen. The browser must allow the fullscreen request from a user ac
 On the receiving Windows desktop, build the native receiver and run:
 
 ```powershell
-./target/release/vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp
+.\target\release\vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp
 ```
 
 Keep the complete Canvas visible. The page fits integer physical cell sizes to the available
@@ -40,9 +40,12 @@ Pause keeps the current frame and session. Hiding the document pauses without au
 Stop terminates the Worker immediately, including during the initial hash scan, and releases its
 file/session resources. Restart creates a new random session and begins the systematic pass again.
 The page continues repair frames until stopped; receiver completion is not signaled back.
-The receiver's default 256 MiB limit still applies; larger files require an explicit receiver
-limit and sufficient receiver memory. File names must meet the protocol's 255-byte UTF-8 and
-path-character rules. Keep the input file unchanged until transmission ends.
+The receiver's default 256 MiB limit applies. Larger files require `--max-file-size BYTES` and
+sufficient receiver memory; native receivers also retain a 1,000,000-source-symbol limit that
+this option does not change. That caps standard robust transfers at 531,000,000 bytes and balanced
+transfers at 4,884,000,000 bytes, even with a higher byte limit. See [resource limits](cli.md#resource-limits).
+File names must meet the protocol's 255-byte UTF-8 and path-character rules. Keep the input file
+unchanged until transmission ends.
 
 The distribution contains only `index.html`. CSS and the main script are inline; the bridge and
 Worker are bundled into an escaped JSON script block, and WASM is embedded as base64. Starting
@@ -73,8 +76,8 @@ JS/CSS/WASM assets from the previous multi-file distribution and preserve unrela
 
 ## Adapter and ABI
 
-`apps/vft-send-web` is a `cdylib` compiled for `wasm32-unknown-unknown`. No new third-party Rust or
-JavaScript dependency is introduced. A small scalar ABI avoids a generated binding toolchain:
+`apps/vft-send-web` is a `cdylib` compiled for `wasm32-unknown-unknown`. It depends on the shared
+Rust cores and uses no third-party JavaScript packages. A small scalar ABI avoids a generated binding toolchain:
 
 - Imports `vft.read_at(f64 offset, u32 destination, u32 length) -> i32` and
   `vft.hash_progress(f64 done, f64 total)`.
@@ -132,7 +135,7 @@ erasures, duplicate frames and batch reordering. The scalar ABI rejects malforme
 read failures, including a source becoming unreadable after hashing. All fixtures/logs stay in
 ignored `output/`.
 
-Recorded implementation evidence is in [wasm-sender-20261002.md](benchmarks/wasm-sender-20261002.md).
+Earlier adapter validation is recorded in [wasm-sender-20261002.md](benchmarks/wasm-sender-20261002.md).
 The [2026-11-11 demo validation](benchmarks/web-demo-20261111.md) covers the single-file build,
 offline `file://` operation in headless Chromium/Firefox, lifecycle controls and emulated DPI.
 Node tests are headless compatibility evidence; browser UI checks and native desktop regressions

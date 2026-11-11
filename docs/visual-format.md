@@ -17,17 +17,48 @@ receiving converts BGRA to integer luminance `(29*B + 150*G + 77*R) >> 8`.
 
 ## Layout
 
-Left/right edges are one black cell. Row 0 is a stable sync pattern with eight-cell runs of
-black/white; the bottom row is its inverse. Inner row 1 contains four equal calibration patches
-(0, 85, 170, 255), sampled at each patch center. Inner row 2 has an 80-cell binary bootstrap:
+Coordinates are zero-based over the complete `C`-column, `R`-row grid, including the border.
+Cells are stored row-major at `y * C + x`. All cells start black. Columns `x=0` and `x=C-1`
+stay black on every row, including the sync rows. For interior columns `1 <= x <= C-2`:
+
+```text
+top(x)        = 255 * (floor(x / 8) mod 2)       at y = 0
+bottom(x)     = 255 - top(x)                    at y = R-1
+calibration(x)= 85 * floor(4 * (x-1) / (C-2))   at y = 1
+```
+
+The sync phase uses the full-grid `x`, not `x-1`: the first interior black run has seven
+cells (`x=1..7`), followed by eight white cells (`x=8..15`). The last white run is clipped
+by the black right border. Only the interior bottom row is the inverse of the top row.
+
+The four calibration levels are 0, 85, 170 and 255. Their integer widths are:
+
+| Grid columns | Patch widths from left to right | Sample columns for levels 0..3 |
+| --- | --- | --- |
+| 96 | 24, 23, 24, 23 | 12, 36, 59, 83 |
+| 192 | 48, 47, 48, 47 | 24, 72, 119, 167 |
+
+Calibration sample column `j` is `1 + floor((C-2) * (2*j+1) / 8)`, for `j=0..3`.
+Row `y=2`, columns `x=1..80`, contains an 80-cell binary bootstrap:
 
 ```text
 ASCII VFG0 [4 bytes] | profile [1] | reserved=0 [1] | packet_byte_length_le32 [4]
 ```
 
-Remaining inner cells in row 2 are black. Packet data begins at inner row 3, proceeds left to
-right, then top to bottom, and ends before the bottom sync row. Bits within each byte are most
-significant first. Binary uses eight cells/byte, balanced four cells/byte. Unused data cells are black.
+The bootstrap length is the complete encoded packet length, including its header and CRC.
+The length is little endian; bits within each bootstrap byte are rendered most significant
+first, with 0 mapped to black and 1 to white. Remaining interior cells in row 2 stay black.
+
+Packet data starts at `(x=1, y=3)`. Data cell number `n` maps to
+`x = 1 + (n mod (C-2))`, `y = 3 + floor(n / (C-2))`, ending before the bottom sync row.
+Bits within each byte are most significant first. Robust uses eight cells per byte (0 → 0,
+1 → 255); balanced uses four cells (00 → 0, 01 → 85, 10 → 170, 11 → 255).
+Unused data cells, including any incomplete trailing byte capacity, remain black.
+
+For example, balanced bytes `1B E4` map to luminance cells
+`0, 85, 170, 255, 255, 170, 85, 0`. Robust byte `81` maps to
+`255, 0, 0, 0, 0, 0, 0, 255`. Packet capacity is
+`floor((C-2) * (R-4) * bits_per_cell / 8)` bytes.
 
 The bootstrap uses one bit per cell regardless of profile. Lattice dimensions are part of the
 selected profile; a custom logical lattice must be provided by both callers. The Windows receiver
@@ -35,14 +66,18 @@ tries the two standard lattices on every frame until a manifest selects the sess
 
 ## Sampling and rejection
 
-Sampling averages nine positions per cell at 3/8, 4/8 and 5/8 of the cell dimensions. This tolerates
-axis-aligned scaling without sampling transition edges. The capture must have at least two pixels
-per cell. Rotated frames, wrong crops, occlusion and strong compression can cause rejection.
+Sampling averages nine positions per cell at 3/8, 4/8 and 5/8 of its dimensions. For a capture
+rectangle `(X, Y, W, H)`, sample cell `(x, y)` at
+`(X + floor((8*x+dx)*W/(8*C)), Y + floor((8*y+dy)*H/(8*R)))` for every `dx,dy` in `{3,4,5}`.
+The sampled luminance is `floor(sum / 9)`. The capture must have at least two pixels per cell.
+Rotated frames, wrong crops, occlusion and strong compression can cause rejection.
 
-Calibration levels must be increasing by at least 25 luminance units. Binary uses the midpoint of
-the darkest/brightest patches; balanced selects the closest calibrated level. Sync mismatches must
-be at most 5%. Bootstrap magic/reserved/profile/length must validate, then the packet CRC must pass.
-CRC failures are discarded and recovered with FEC.
+Calibration levels must increase by at least 25 luminance units between adjacent patches.
+Binary decoding uses `threshold = floor((level[0] + level[3]) / 2)`; values strictly above it
+decode to 1, others to 0. Balanced selects the nearest calibrated level, choosing the lower index
+on a tie. Sync mismatches across the `2*(C-2)` interior sync cells must be at most 5%.
+Bootstrap magic/reserved/profile/length must validate, then the packet CRC must pass. The packet
+profile must match the bootstrap. CRC failures are discarded and recovered with FEC.
 
 ## Desktop location
 

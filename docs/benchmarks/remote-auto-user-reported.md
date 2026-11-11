@@ -35,7 +35,7 @@ COMPLETE sha256=verified bytes=617787 elapsed=22.077s goodput=27.3 KiB/s progres
 
 This is direct user-provided evidence of successful automatic screen discovery and file recovery
 through a real remote desktop display, including the receiver's full-file SHA-256 verification.
-The agent did not run or independently inspect this remote session. No source/output hash strings,
+The remote session was not independently inspected. No source/output hash strings,
 statistics CSV, exact command lines or independent file-hash comparison were provided.
 
 27.3 KiB/s is the CLI's rounded verified payload goodput, including receiver discovery, decoding,

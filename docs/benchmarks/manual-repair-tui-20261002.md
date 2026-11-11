@@ -1,16 +1,17 @@
 # Manual repair and Windows TUI local validation
 
-Date: 2026-10-02, Asia/Shanghai. This records implementation and local evidence, not M14
-acceptance or a real remote manual-repair speedup. The accepted scope is
-[manual-repair-tui-plan.md](../manual-repair-tui-plan.md).
+Date: 2026-10-02, Asia/Shanghai. This records local functional evidence, not remote
+acceptance or a real remote manual-repair speedup. For current usage, see
+[terminal controls and manual repair](../terminal-controls.md). Toolchain versions and
+commands below describe the tested revisions; current requirements are in
+[the build guide](../development.md).
 
 ## Automated evidence
 
 The workspace passes formatting, check, strict all-target clippy and tests. The locked Windows
 workspace checks with Rust 1.85.0; shared libraries check without default features. Release builds
 and `check-web.ps1` pass, including native decoding of WASM source/repair-only transfers. The
-terminal backend is pinned to Ratatui 0.29.0 / Crossterm 0.28.1; the lockfile uses instability
-0.3.7 because the initially resolved 0.3.14 required Rust 1.88. Revalidate MSRV when updating it.
+tested terminal backend used Ratatui 0.29.0 / Crossterm 0.28.1 and instability 0.3.7.
 
 Coverage includes independently computed VFR1 bytes, tag/CRC, hexadecimal normalization,
 truncation, duplicate/range/deficit/length errors, last/unseen/completed groups, overflow,
@@ -110,5 +111,5 @@ all lifecycle/error paths under physical keyboard input, and the complete two-wi
 1280x720/single-screen remote desktop remain. ConPTY and buffer tests do not establish these.
 No real RDP 1 MiB / 100 MiB comparison with three repetitions, human transcription time,
 request latency, rank-rate history, per-request read costs or CPU/memory was measured here.
-Those checks remain in P6. Browser manual-input UI is outside this first implementation;
-automatic WASM compatibility is preserved. Existing remote throughput limitations remain.
+Browser manual-input UI is unavailable; automatic WASM compatibility is preserved.
+Existing remote throughput limitations remain.

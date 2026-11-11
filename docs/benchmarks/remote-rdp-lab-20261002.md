@@ -149,7 +149,7 @@ watermark was not disabled. A missing-runtime startup and an orchestration readi
 also retained as setup failures; neither is counted as a measured transfer.
 
 These runs add an independently executed real RDP matrix, controlled-network cases, repair-only
-joining and a 100 MiB pass. They do not complete the full M14 matrix: the requested 8/16 px balanced
+joining and a 100 MiB pass. They do not complete the full remote matrix: the requested 8/16 px balanced
 and 16 px robust presets, all robust FPS cases, three repetitions per configuration, the remaining
 100 MiB configurations, other codecs, deliberate remote movement/occlusion and independently
 measured video bitrate remain untested here. The sustained throughput target remains unmet.

@@ -1,7 +1,7 @@
 # Native receiver output destinations (2026-11-09)
 
-Both native receivers now support `--output-dir DIR`, defaulting to the current working
-directory, and use the manifest filename when `--output` is omitted. Explicit output paths
+Source revision: `5b74ee5`. Both native receivers support `--output-dir DIR`, defaulting to
+the current working directory, and use the manifest filename when `--output` is omitted. Explicit output paths
 take precedence. The directory must exist; unsafe metadata names, existing destinations
 and preview/statistics aliases are rejected. SHA verification and create-new writes remain
 required. No wire/FEC/visual changes or external dependencies were added.
@@ -22,10 +22,6 @@ existing destinations, diagnostic aliases, Windows device/case rules and Unix sy
 aliases/dangling destinations. Native adapter tests verify no recovered output before
 SHA completion and preserve files created after manifest acceptance; Linux also checks
 that progress/completion retain the resolved path and correct lifecycle state.
-
-Initial Linux checks caught an outdated capture-test option initializer and a test
-comparing an unnormalized `../..` fixture path with the canonical destination. Both test
-fixtures were corrected; the final full check passes.
 
 ## Windows physical capture
 
@@ -70,4 +66,4 @@ Raw fixtures, logs, previews, stats and summaries are retained under ignored `ou
 - `tui-cli-20261109-071003-yhifm8xb` (redirected mode probes)
 
 Linux portal/desktop capture and real remote transfers were not rerun for this change.
-These local results do not establish remote goodput or complete M14 acceptance.
+These local results do not establish remote goodput or complete remote acceptance.

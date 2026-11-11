@@ -1,7 +1,10 @@
-# WASM sender implementation validation — 2026-10-02
+# WASM sender validation — 2026-10-02
 
-This records the requested browser adapter extension, independently of M14 native RDP acceptance.
+This records browser adapter validation, independently of native remote desktop acceptance.
 No browser remote goodput or browser-to-Windows physical screen transfer is claimed here.
+The multi-file packaging, toolchains and PowerShell scripts below describe this historical
+revision. See the [current browser guide](../wasm-sender.md) for the single-file build and
+[later offline browser checks](web-demo-20261111.md) for subsequent validation.
 
 ## Build and compatibility
 
@@ -77,5 +80,5 @@ This protects the existing native path and does not establish browser screen-cap
 
 Still needed: browser Canvas → Windows physical capture with independent recovered-file SHA,
 browser sender in the real RDP/netem lab, additional browser engines, deliberate resize/DPI
-movement/occlusion and sustained remote performance. Original native M14 evidence remains in
+movement/occlusion and sustained remote performance. Native remote evidence remains in
 [remote-rdp-lab-20261002.md](remote-rdp-lab-20261002.md).

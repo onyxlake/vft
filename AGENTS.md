@@ -6,9 +6,9 @@ These instructions apply to the entire repository. Follow the user's current req
 
 - Inspect `git status --short` and the relevant diff before editing.
 - Read [README.md](README.md) for usage and [docs/status.md](docs/status.md) for current progress and limitations.
-- The accepted scope and checkpoint workflow are in [docs/plan.md](docs/plan.md). Consult [docs/architecture.md](docs/architecture.md), [docs/protocol.md](docs/protocol.md), and [docs/visual-format.md](docs/visual-format.md) for changes to their respective components.
+- Current support and limitations are in [docs/status.md](docs/status.md); the checkpoint workflow is below. Consult [docs/architecture.md](docs/architecture.md), [docs/protocol.md](docs/protocol.md), and [docs/visual-format.md](docs/visual-format.md) for changes to their respective components.
 - Work in small, testable logical units. Keep changes focused; do not overwrite, stage, or revert unrelated work.
-- Update documentation when behavior, wire format, commands, milestone evidence, or limitations change.
+- Update documentation when behavior, wire format, commands, validation evidence, or limitations change.
 
 ## Architecture and scope
 
@@ -33,11 +33,11 @@ The five protocol/FEC/visual/sender/receiver libraries are `no_std + alloc`. Kee
 
 Respect the workspace's declared Rust version and edition in `Cargo.toml`. A successful build on a newer compiler does not establish minimum-version compatibility. Avoid adding dependencies or platform requirements without a concrete need.
 
-Phase 1 targets Windows 10/11 x64. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [docs/future-platforms.md](docs/future-platforms.md) before changing portability boundaries.
+Supported adapters target Windows 10/11 x64, Linux Wayland and browser sending. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [docs/status.md](docs/status.md) before changing portability boundaries.
 
-The user-requested WASM sender is now included. Keep file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
+Keep browser sender file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
 
-The user-requested Linux Wayland extension is included; see [docs/linux-wayland.md](docs/linux-wayland.md).
+For Linux Wayland adapters, see [docs/linux-wayland.md](docs/linux-wayland.md).
 Linux desktop dependencies stay target-specific. Capture coordinates refer to selected-stream
 physical pixels. Real desktop testing requires stopping and asking the user first.
 
@@ -100,10 +100,10 @@ $env:CARGO_HOME = Join-Path (Get-Location) '.build\cargo'
 
 Keep generated fixtures, capture images and logs under ignored `output/`; keep build/cache artifacts under `target/` and `.build/`. Commit only intentional small golden vectors and documented measurement records.
 
-## Benchmarks and milestone evidence
+## Benchmarks and validation evidence
 
-- Consult [docs/benchmarks.md](docs/benchmarks.md) for recorded measurements and [docs/remote-validation.md](docs/remote-validation.md) for M14 procedures.
-- Simulation, local desktop and real remote desktop results are separate evidence. Local success cannot complete M14 or establish the remote 40–100 KB/s target. Check the current status document before reporting completion.
+- Consult [docs/benchmarks.md](docs/benchmarks.md) for recorded measurements and [docs/remote-validation.md](docs/remote-validation.md) for remote acceptance procedures.
+- Simulation, local desktop and real remote desktop results are separate evidence. Local success cannot complete remote acceptance or establish the remote 40–100 KB/s target. Check the current status document before reporting completion.
 - Verify recovered bytes with an independent SHA-256 comparison. Report payload goodput only for verified successful runs; failed runs have zero verified goodput.
 - Record configuration, elapsed time, units, actual observed frame rate, CPU and memory when available. Requested FPS is not observed unique-frame rate. Leave unmeasured values unknown.
 - Interpret counters according to the documented definitions. Source/repair capture counts include duplicates; capture rejection is not video frame loss. Do not invent bitrate, symbol error rate or remote-session settings.
@@ -111,7 +111,7 @@ Keep generated fixtures, capture images and logs under ignored `output/`; keep b
 
 ## Checkpoints and tool hygiene
 
-The accepted plan authorizes automatic local checkpoint commits after validation, one logical unit per commit. Review the final diff, run the check script, stage only the intended paths, and use a descriptive Conventional Commit such as `feat(fec): ...`, `fix(win-receiver): ...`, `test(e2e): ...` or `docs: ...`.
+Automatic local checkpoint commits are authorized after validation, one logical unit per commit. Review the final diff, run the check script, stage only the intended paths, and use a descriptive Conventional Commit such as `feat(fec): ...`, `fix(win-receiver): ...`, `test(e2e): ...` or `docs: ...`.
 
 Do not automatically push, force-push, rebase remote branches, reset unrelated user work, or run `git clean -fdx`. Do not change global Git configuration to work around an execution environment issue.
 

@@ -1,8 +1,7 @@
 # Linux Wayland sender and receiver
 
-The user-requested Linux extension adds `vft-send-linux` and `vft-recv-linux`.
-It reuses the existing v0 protocol, FEC, visual codec and sender/receiver sessions.
-Windows adapters and the browser sender remain supported. X11 is not implemented.
+`vft-send-linux` and `vft-recv-linux` use the shared v0 protocol, FEC, visual codec and
+sender/receiver sessions. They run on Wayland; X11 is not implemented.
 
 ## Build and runtime requirements
 
@@ -22,6 +21,8 @@ Install/configure the backend for your desktop; the applications do not change s
 
 ```sh
 cargo build --release -p vft-send-linux -p vft-recv-linux
+mkdir -p output
+# Run the sender and receiver in separate terminals:
 ./target/release/vft-send-linux input.bin --profile balanced --fps 15 --cell-size 4
 ./target/release/vft-recv-linux --auto --output recovered.bin --preview output/crop.bmp
 ```
@@ -29,15 +30,15 @@ cargo build --release -p vft-send-linux -p vft-recv-linux
 Use `cargo metadata` to locate binaries if Cargo uses a custom target directory.
 Diagnostic directories must already exist. Output, stats and preview paths must be
 new and distinct; no file is silently overwritten. All filenames printed in terminal
-controls are escaped for control characters.
+controls are escaped for control characters. See the [CLI reference](cli.md) for all options.
 
 `--output FILE` is optional. Without it, the receiver saves the original manifest filename
 in `--output-dir DIR`, which defaults to the current working directory and must already
 exist. An explicit `--output` always uses its supplied path and overrides `--output-dir`;
 a relative explicit path stays relative to the working directory. The resolved destination
 appears in CLI/TUI progress and completion. Unsafe metadata filenames, existing destinations
-and collisions with preview/statistics files are rejected. These are adapter-only changes;
-the wire format and SHA-verified create-new output contract are unchanged.
+and collisions with preview/statistics files are rejected. Output uses create-new semantics
+after full-file SHA-256 verification.
 
 ## Presentation
 
@@ -76,8 +77,8 @@ conversion. Empty/corrupted chunks are skipped. Planar YUV, DMA-BUF-only produce
 HDR and transformed camera images are unsupported. There is no GPU import/conversion.
 If the compositor cannot negotiate a supported CPU format, capture fails explicitly.
 The capture handoff holds only the latest luma image, replacing stale frames. Recovery
-remains memory-backed with the existing default **256 MiB file limit**; this is not
-bounded-memory streaming recovery.
+remains memory-backed with a default **256 MiB file limit** and a separate **1,000,000 source-symbol
+limit**. `--max-file-size` changes only the byte limit; see [resource limits](cli.md#resource-limits).
 
 `--auto` locates a CRC-valid standard grid in the selected stream, searches at most
 twice per second, and reacquires after 750 ms of continuous decode failure. Stream
@@ -113,7 +114,7 @@ Interactive stdin/stdout select TUI by default; `--no-tui` forces script-friendl
 and `--tui` requires both terminals. The sender terminal supports R to enter/preview/
 apply a request, Space to pause, X to cancel unsent repairs, Q/Ctrl+C to quit. The
 receiver supports group selection, R to freeze requests and P for the copy view.
-See [README controls](../README.md). Capture continues while reading a request; verified
+See [terminal controls](terminal-controls.md). Capture continues while reading a request; verified
 completion remains in TUI until Q, whereas ordinary CLI exits automatically.
 
 [Kitty/Hyprland TUI validation](benchmarks/linux-tui-20261016.md) passes a SHA-verified
@@ -128,7 +129,7 @@ are restored on ordinary errors/unwind; forced termination cannot promise restor
 No clipboard, shared filesystem, network connection between endpoints or feedback is
 required by the transport. D-Bus/PipeWire are local capture APIs only.
 
-## Verification and desktop checkpoint
+## Verification
 
 Headless regression coverage includes both profiles, repair-only late joining across
 multiple generations, dropped/reordered/duplicate captures, padded RGB conversion,
@@ -137,22 +138,16 @@ empty files, resource limits and create-new verified output/preview behavior. Ca
 panic containment and cancellation/timeout polling are tested without opening a portal.
 The existing workspace checks and release build remain required.
 
-On 2026-10-16, `python3 scripts/check.py` (Python regressions, fmt/check/strict Clippy/
-workspace tests), `cargo build --release --workspace`, the five-core no-default-features
-check and `cargo +1.85.0 check --workspace --all-targets --locked` pass on Linux.
-The main compiler is Rust 1.94.0; native headers are PipeWire 1.6.9 with libclang 23.1.
-These are compilation and synthetic recovery results, not desktop evidence.
-
-Real desktop testing must be explicitly cleared by the user before launching either
-application against a desktop. The user cleared the following 1 KiB/1 MiB run on
-2026-10-16; both pass independent SHA-256 on Hyprland 0.56.2. See the
-[configuration, timing, hashes and remaining acceptance](benchmarks/local-hyprland-20261016.md):
+The [dependency baseline](dependencies.md) records compiler and headless checks. Separate
+[local desktop measurements](benchmarks/local-hyprland-20261016.md) record independent SHA-256
+matches for 1 KiB and 1 MiB on Hyprland 0.56.2 at the tested revision. To run the interactive
+harness after building release binaries:
 
 ```sh
 python3 scripts/wayland-e2e.py --sizes 1024 1048576 --fps 30 --cell-size 4 --skip-build
 # Additional acceptance: robust, late joining, empty file, move/cover/reveal,
 # fractional/mixed DPI, manual rectangle, portal denial/revocation, TUI controls.
-python3 scripts/wayland-e2e.py --sizes 1024 --profile robust --join-delay-seconds 5 --skip-build
+python3 scripts/wayland-e2e.py --sizes 1024 --profile robust --cell-size 16 --join-delay-seconds 5 --skip-build
 ```
 
 The harness opens the sender and then the portal; the user selects a window/monitor
@@ -161,7 +156,7 @@ logs and previews, compares input/output SHA-256 independently, and stops only c
 it started. Unknown CPU/memory/display FPS fields stay blank. Movement/occlusion and
 broader TUI interaction need additional testing. The recorded passes establish local Wayland
 evidence for that configuration; cross-platform screen transfer and real remote acceptance remain
-separate from compilation and synthetic recovery. Existing M14 limitations are unchanged.
+separate from compilation and synthetic recovery. See [support and limitations](status.md).
 
 References: [ScreenCast portal specification](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html),
 [pipewire-rs examples](https://gitlab.freedesktop.org/pipewire/pipewire-rs/-/tree/0.10.1/pipewire/examples),

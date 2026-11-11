@@ -4,7 +4,7 @@ The user reported a successful real remote desktop `--auto` run on 2026-09-30 an
 SHA-verified completion log: 617,787 bytes in 22.077 s at 27.3 KiB/s. See the
 [recorded evidence](benchmarks/remote-auto-user-reported.md). Transport product/codec, profile,
 FPS, cell size, display configuration and remote movement tests were not supplied. This first
-remote functional pass is below the 40–100 KB/s target; the complete M14 matrix remains pending.
+remote functional pass is below the 40–100 decimal KB/s target; the complete matrix remains pending.
 An independently executed [Hyper-V RDP lab record](benchmarks/remote-rdp-lab-20261002.md)
 now adds 1 MiB FPS/profile cases, gateway rate/delay/loss controls, repair-only joining and an
 independently verified 100 MiB transfer. The latter took 3499.663 s at 29.3 KiB/s, below the
@@ -20,20 +20,22 @@ watermark; a smaller window outside the overlay passed.
 
 ## Setup
 
-Build `cargo build --release --workspace` on Windows x64. Copy the sender executable and a known
-fixture to the remote side through an allowed provisioning route; this is setup, not the transfer
+Install the [Windows build/runtime prerequisites](development.md#windows), then run
+`cargo build --release --workspace` from the repository root on Windows x64. Copy the sender
+executable and a known fixture to the remote side through an allowed provisioning route; this is setup, not the transfer
 channel being measured. Keep the remote desktop unlocked and visible. Hash the fixture on the
 sender before testing, and record file length, screen resolution, scaling, transport settings,
 codec and independently measured video bitrate. Unknown values must stay unknown.
 
-On the sender:
+On the sender, from the directory containing the copied executable and fixture:
 
 ```powershell
-vft-send-win.exe fixture.bin --profile balanced --fps 15 --cell-size 8 --topmost
+.\vft-send-win.exe fixture.bin --profile balanced --fps 15 --cell-size 8 --topmost
 ```
 
 On the receiver, determine the physical-pixel rectangle containing only the full visual frame
-(exclude the title bar/borders). This manual crop is the intended Phase 1 capture input:
+(exclude the title bar/borders). The benchmark script uses a manual crop. From the receiver's
+repository root:
 
 ```powershell
 python scripts/remote-benchmark.py --x 50 --y 80 --width 1536 --height 864 --profile balanced --sender-fps 15 --cell-size 8 --transport RDP --codec unknown --expected-sha256 THE_HASH_FROM_THE_SENDER
@@ -43,12 +45,12 @@ Coordinates above are examples, not a detected rectangle. The script creates uni
 configuration JSON, a crop preview, receiver logs, receiver CPU/memory statistics, and verified
 payload goodput. It never communicates with the sender or marks an unsuccessful run as verified.
 
-For interactive use without measuring a manual crop, the receiver now supports:
+For interactive use without measuring a manual crop, the receiver supports:
 
 ```powershell
-vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp --stats stats.csv
+.\target\release\vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp --stats stats.csv
 # Restrict discovery to the local area displaying the remote desktop if needed:
-vft-recv-win.exe --auto --search-rect 0 0 1920 1080 --output recovered.bin
+.\target\release\vft-recv-win.exe --auto --search-rect 0 0 1920 1080 --output recovered.bin
 ```
 
 The locator reads screen pixels, so it also works with a remote sender displayed locally; it does
@@ -104,5 +106,5 @@ instrumentation and attach the evidence to the run. Do not derive missing frames
 FPS alone: Windows timers, composition and the codec can repeat or drop frames.
 
 Document successful and failed runs. The user-reported run supplies real remote SHA-verified E2E
-evidence and the first payload-goodput result. Complete the broader M14 matrix with configuration
+evidence and the first payload-goodput result. Complete the broader remote matrix with configuration
 and metrics recorded above; a single successful run does not establish every profile/FPS case.

@@ -30,21 +30,28 @@ Manifest packets use generation/index zero. Control packets are reserved and ign
 | --- | --- | --- |
 | 0 | 1 | Version = 0 |
 | 1 | 1 | FEC type = 0 (binary fountain v0) |
-| 2 | 1 | Visual profile |
+| 2 | 1 | Visual profile, must match packet |
 | 3 | 1 | Compression = 0 (none) |
 | 4 | 16 | Session ID, must match packet |
 | 20 | 16 | Object ID, must match packet |
 | 36 | 8 | Original file length |
 | 44 | 32 | SHA-256 of original file bytes |
-| 76 | 4 | Source symbol length |
+| 76 | 4 | Source symbol length, 1..65,535 bytes |
 | 80 | 4 | Source symbol count |
 | 84 | 2 | UTF-8 filename length |
 | 86 | variable | UTF-8 filename, 1..255 bytes |
 
 Symbol count must equal `ceil(file_length / symbol_length)`; an empty object has zero symbols.
-Filenames cannot contain NUL, slash, backslash or colon, or be `.`/`..`. Receivers use the explicitly
-selected output path, not the transmitted name. Symbols are zero-padded to their declared length;
-padding is excluded from the final SHA-256. Maximum symbol count is `u32::MAX`.
+Filenames cannot contain NUL, slash, backslash or colon, or be `.`/`..`. The wire format carries
+a filename, not an output path. Native receivers use that name in `--output-dir` (default: current
+directory) unless `--output` supplies an explicit path. Adapter validation additionally rejects
+unsafe local names, existing destinations and diagnostic-path collisions; see
+[output rules](cli.md#output-rules). These filesystem checks are separate from manifest validation.
+
+Symbols are zero-padded to their declared length; padding is excluded from the final SHA-256.
+Maximum symbol count is `u32::MAX`. Source and repair payloads must have exactly the manifest's
+symbol length and profile. A source symbol at generation `g`, index `i` begins at file offset
+`(64 * g + i) * symbol_length`.
 
 Generation size is fixed at 64 source symbols. Generation count is `ceil(source_count / 64)`.
 The last generation can be shorter. Source index `i < k` denotes a unit coefficient vector;
@@ -89,7 +96,9 @@ The recent duplicate cache defaults to 4,096 symbol IDs. Older duplicates remain
 FEC rejects dependent equations and completed generations ignore new symbols. Duplicate statistics
 count cache hits; valid symbols include dependent equations, and ignored symbols include arrivals
 for completed generations. Receiver defaults limit file length to 256 MiB and source count to
-1,000,000. Limits are configurable; callers must budget memory before raising them.
+1,000,000. Core callers can configure `Limits`; native CLI `--max-file-size` changes only the
+file-length limit. See [resource limits](cli.md#resource-limits) for profile-specific ceilings.
+Callers must budget memory before raising limits.
 
 Golden vectors in `tests/golden/` fix packet, manifest and repair bytes. They were independently
 generated using Python `struct`, `hashlib`, and explicit CRC/FEC arithmetic.
