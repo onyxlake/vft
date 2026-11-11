@@ -1,7 +1,7 @@
 //! Portal session and PipeWire resources stay alive until capture has stopped.
 use super::State;
 use ashpd::desktop::{
-    screencast::{CursorMode, Screencast, SourceType},
+    screencast::{CursorMode, Screencast, SelectSourcesOptions, SourceType},
     PersistMode,
 };
 use pipewire::{self as pw, properties::properties, spa};
@@ -35,35 +35,47 @@ pub(super) fn run(state: &mut State) -> Result<()> {
         .enable_all()
         .build()?;
     let portal = runtime.block_on(wait(state, Screencast::new()))??;
-    let session = runtime.block_on(wait(state, portal.create_session()))??;
+    let session = runtime.block_on(wait(state, portal.create_session(Default::default())))??;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let (node, fd) = runtime.block_on(wait(state, async {
             let types =
-                portal.available_source_types().await? & (SourceType::Monitor | SourceType::Window);
+                portal.available_source_types().await? & (SourceType::MONITOR | SourceType::WINDOW);
             if types.is_empty() {
                 return Err("portal offers neither monitor nor window capture".into());
             }
             let modes = portal.available_cursor_modes().await?;
-            let cursor = if modes.contains(CursorMode::Hidden) {
-                CursorMode::Hidden
-            } else if modes.contains(CursorMode::Metadata) {
-                CursorMode::Metadata
-            } else if modes.contains(CursorMode::Embedded) {
+            let cursor = if modes.contains(CursorMode::HIDDEN) {
+                CursorMode::HIDDEN
+            } else if modes.contains(CursorMode::METADATA) {
+                CursorMode::METADATA
+            } else if modes.contains(CursorMode::EMBEDDED) {
                 state.report("Portal embeds the cursor; keep it outside the visual frame.");
-                CursorMode::Embedded
+                CursorMode::EMBEDDED
             } else {
                 return Err("portal offers no supported cursor mode".into());
             };
             portal
-                .select_sources(&session, cursor, types, false, None, PersistMode::DoNot)
+                .select_sources(
+                    &session,
+                    SelectSourcesOptions::default()
+                        .set_cursor_mode(cursor)
+                        .set_sources(types)
+                        .set_multiple(false)
+                        .set_persist_mode(PersistMode::DoNot),
+                )
                 .await?
                 .response()?;
-            let response = portal.start(&session, None).await?.response()?;
+            let response = portal
+                .start(&session, None, Default::default())
+                .await?
+                .response()?;
             let stream = response
                 .streams()
                 .first()
                 .ok_or("portal returned no capture stream")?;
-            let fd = portal.open_pipe_wire_remote(&session).await?;
+            let fd = portal
+                .open_pipe_wire_remote(&session, Default::default())
+                .await?;
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>((stream.pipe_wire_node_id(), fd))
         }))??;
         stream(state, node, fd)
@@ -272,7 +284,11 @@ fn stream(state: &mut State, node: u32, fd: OwnedFd) -> Result<()> {
     )?;
     let mut next = Instant::now();
     loop {
-        if mainloop.loop_().iterate(Duration::from_millis(10)) < 0 {
+        if mainloop
+            .loop_()
+            .iterate(pw::loop_::Timeout::Finite(Duration::from_millis(10)))
+            < 0
+        {
             return Err("PipeWire loop iteration failed".into());
         }
         if let Some(error) = frames.borrow_mut().error.take() {

@@ -134,7 +134,7 @@ fn next_event() -> io::Result<Option<Event>> {
 }
 pub fn random_id() -> Result<u64, String> {
     let mut bytes = [0u8; 8];
-    getrandom::getrandom(&mut bytes).map_err(|e| format!("OS random request ID failed: {e}"))?;
+    getrandom::fill(&mut bytes).map_err(|e| format!("OS random request ID failed: {e}"))?;
     Ok(u64::from_le_bytes(bytes))
 }
 

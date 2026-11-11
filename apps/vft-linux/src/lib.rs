@@ -125,7 +125,7 @@ pub fn packed_luma(
     let mut pixels = Vec::with_capacity(width * height);
     for y in 0..height {
         let y = if stride < 0 { height - 1 - y } else { y };
-        for p in data[y * pitch..y * pitch + row].chunks_exact(4) {
+        for p in data[y * pitch..y * pitch + row].as_chunks::<4>().0 {
             let (r, b) = match order {
                 PixelOrder::Rgb => (p[0], p[2]),
                 PixelOrder::Bgr => (p[2], p[0]),

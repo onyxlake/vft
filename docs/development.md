@@ -1,8 +1,9 @@
 # Development on Windows and Linux
 
 The repository's development entry points use Python 3.9+ and its standard library.
-No pip packages or PowerShell installation are required. Install Rust/Cargo; browser checks also
-need the `wasm32-unknown-unknown` Rust target and Node.js 22+. On Linux, substitute `python3`
+No pip packages or PowerShell installation are required. Rust 1.99.1 is the minimum supported
+version and the pinned toolchain in `rust-toolchain.toml`; rustup installs rustfmt, Clippy and
+`wasm32-unknown-unknown` with it. Browser checks also need Node.js 22+. On Linux, substitute `python3`
 for `python` when necessary. Script paths below are relative to the repository root; scripts
 resolve their working directory internally, so absolute script paths also work elsewhere.
 

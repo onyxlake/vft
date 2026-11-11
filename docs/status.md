@@ -2,6 +2,16 @@
 
 Updated 2026-11-11 (Asia/Shanghai). The original scope is preserved in [plan.md](plan.md).
 
+The workspace now requires and pins Rust 1.99.1. Direct dependencies and the lockfile have been
+updated; `lru 0.18.5` replaces the version with two reported soundness issues, and `paste` plus
+the retired D-Bus companion crates are removed. An OSV query of all 304 registry packages in
+the final lockfile returns no advisory matches. Linux checks (19 Python and 65 Rust tests),
+core no-default-features/native/WASM checks, Windows cross-checks, Linux release builds and
+WASM/native recovery pass, as do headless Chromium/Firefox offline checks. See
+[versions, audit scope and validation limits](dependencies.md). Physical desktop and remote
+capture were not rerun for this upgrade.
+Rust 1.85 results below are historical evidence for earlier revisions, not the current baseline.
+
 The browser sender now has a plain English demo UI and builds to one self-contained
 `output/web-sender/index.html`. Embedded WASM and a classic Blob Worker allow direct `file://`
 use without a server or external assets. Linux workspace checks, release builds, packaged
@@ -40,9 +50,10 @@ Linux desktop capture and real remote acceptance were not rerun for this change.
 | Manual repair / Windows TUI extension | Implemented; core, buffer, ConPTY and local screen checks; remote acceptance pending | VFR1 independent vector, generation progress, fair targeted scheduling, default English terminal controls and `--no-tui`; [local evidence and remaining checks](benchmarks/manual-repair-tui-20261002.md) |
 | Requested Linux Wayland extension | Implemented; headless, local Hyprland 1 KiB/1 MiB and Kitty TUI SHA-verified; broader acceptance pending | Native winit/softbuffer sender, ScreenCast portal/PipeWire receiver, shared TUI/manual repair, create-new output/preview/stats, interactive harness; [local Hyprland evidence](benchmarks/local-hyprland-20261016.md), [Kitty TUI evidence](benchmarks/linux-tui-20261016.md) and [remaining acceptance](linux-wayland.md) |
 
-Repository fmt, check, strict clippy and workspace tests pass on Windows x64 with Rust 1.98.1.
-Release binaries and the WASM sender build successfully. The browser adapter also passes native
-check and a release WASM build with the declared minimum Rust 1.85.0. Five shared libraries use `no_std + alloc` and have also
+Before the 2026-11-11 toolchain upgrade, repository fmt, check, strict clippy and workspace tests
+passed on Windows x64 with Rust 1.98.1. Release binaries and the WASM sender built successfully.
+The browser adapter also passed native check and a release WASM build with the then-declared
+minimum Rust 1.85.0. Five shared libraries use `no_std + alloc` and have also
 passed an explicit no-default-features check. All implementation commits are local; nothing pushed.
 
 The six PowerShell development workflows have been replaced by dependency-free Python 3.9+

@@ -21,8 +21,8 @@ The only external shared dependency is SHA-256 (`sha2` with default features dis
 Windows APIs are target-specific dependencies of the two applications.
 
 `apps/vft-tui` supplies common English control models, Unicode input editing, bounded logs and a
-Windows/Linux Ratatui 0.29 / Crossterm 0.28 backend. Cargo.lock pins its transitive dependencies
-and the locked workspace is checked with Rust 1.85. Native apps choose TUI once at startup when
+Windows/Linux Ratatui 0.30 / Crossterm 0.29 backend. Cargo.lock pins its transitive dependencies
+and `rust-toolchain.toml` pins the Rust 1.99.1 baseline. Native apps choose TUI once at startup when
 stdin and stdout are interactive; `--no-tui` preserves script behavior and explicit `--tui`
 requires both terminals. Help and argument errors remain ordinary text.
 

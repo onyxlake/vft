@@ -9,7 +9,8 @@ Windows controls now support [manual repair requests and TUI](docs/manual-repair
 Interactive stdin/stdout default to the English TUI; `--no-tui` forces ordinary CLI for scripts.
 Explicit `--tui` requires interactive stdin and stdout. The visual transport stays in its own window.
 
-Development scripts require Python 3.9+ and the Rust toolchain, with no Python packages to install.
+Development scripts require Python 3.9+ and Rust 1.99.1 or newer, with no Python packages to install.
+`rust-toolchain.toml` pins Rust 1.99.1 with rustfmt, Clippy and the WASM target for reproducible checks.
 Use `python` on Windows or `python3` on Linux if `python` is unavailable. Commands work from any
 working directory. Workspace and browser checks run on both systems; native desktop checks require
 an unlocked interactive Windows or Linux Wayland desktop, using the platform-specific harness.

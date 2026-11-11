@@ -55,7 +55,8 @@ The same HTML also includes the VFT MIT license, full MIT notices for the locked
 dependencies (including build dependencies), and the selected Rust toolchain's copyright and
 license texts. Open **Licenses and third-party notices** in the footer to read them offline.
 Toolchain notices are retained conservatively and may cover components not linked into WASM.
-The build reads dependency notices from Cargo's package sources and toolchain notices from
+The build resolves locked Cargo metadata, downloading uncached package sources when needed,
+then reads dependency notices from those sources and toolchain notices from
 `share/doc/rust` in the selected `rustc` sysroot. Missing notices or an unsupported dependency
 license stop the build; review license changes before extending `scripts/web_licenses.py`.
 Keep this embedded section when redistributing the single HTML file.

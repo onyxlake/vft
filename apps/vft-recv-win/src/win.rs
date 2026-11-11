@@ -262,7 +262,9 @@ impl Capture {
                 r.width as usize * r.height as usize * 4,
             );
             let pixels = bytes
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|p| {
                     ((u32::from(p[0]) * 29 + u32::from(p[1]) * 150 + u32::from(p[2]) * 77) >> 8)
                         as u8

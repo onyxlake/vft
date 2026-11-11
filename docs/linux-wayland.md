@@ -6,12 +6,12 @@ Windows adapters and the browser sender remain supported. X11 is not implemented
 
 ## Build and runtime requirements
 
-Rust 1.85 or newer, a C compiler, pkg-config, libclang (for PipeWire bindgen),
+Rust 1.99.1 or newer, a C compiler, pkg-config, libclang (for PipeWire bindgen),
 PipeWire/SPA development headers and libraries are needed to build the Linux receiver.
 The sender dynamically loads Wayland and xkbcommon; it uses winit 0.30.13 and
-softbuffer 0.4.8 with only the Wayland backend enabled. The receiver uses ashpd 0.11.0
-and pipewire-rs 0.9.2. Linux desktop dependencies are target-specific and do not enter
-the five `no_std + alloc` cores or Windows builds.
+softbuffer 0.4.8 with only the Wayland backend enabled. The receiver uses ashpd 0.14.0
+(Tokio and ScreenCast features) and pipewire-rs 0.10.1. Linux desktop dependencies are
+target-specific and do not enter the five `no_std + alloc` cores or Windows builds.
 
 For example, Arch Linux build packages are `base-devel pkgconf clang pipewire`;
 Debian/Ubuntu equivalents include `build-essential pkg-config libclang-dev
@@ -164,5 +164,5 @@ evidence for that configuration; cross-platform screen transfer and real remote 
 separate from compilation and synthetic recovery. Existing M14 limitations are unchanged.
 
 References: [ScreenCast portal specification](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html),
-[pipewire-rs examples](https://gitlab.freedesktop.org/pipewire/pipewire-rs/-/tree/0.9.2/pipewire/examples),
+[pipewire-rs examples](https://gitlab.freedesktop.org/pipewire/pipewire-rs/-/tree/0.10.1/pipewire/examples),
 [softbuffer example](https://github.com/rust-windowing/softbuffer/blob/v0.4.8/examples/winit.rs).

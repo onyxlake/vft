@@ -231,7 +231,10 @@ impl<S: ObjectSource> SenderSession<S> {
             .ok_or(Error::Exhausted)?;
         let mut manual_packet = false;
         let (kind, symbol, payload) = if self.manifest.source_symbols == 0
-            || self.progress.frames % self.config.manifest_interval == 0
+            || self
+                .progress
+                .frames
+                .is_multiple_of(self.config.manifest_interval)
         {
             (
                 PacketType::Manifest,

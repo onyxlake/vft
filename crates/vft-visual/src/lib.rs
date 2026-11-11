@@ -136,7 +136,7 @@ fn level(index: usize, profile: ProfileId) -> u8 {
     }
 }
 fn sync(x: usize) -> u8 {
-    if (x / 8) % 2 == 0 {
+    if (x / 8).is_multiple_of(2) {
         0
     } else {
         255

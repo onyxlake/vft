@@ -125,7 +125,7 @@ def toolchain_notices(sysroot, version):
 
 
 def collect_notices(root):
-    metadata = json.loads(capture(root, "cargo", "metadata", "--locked", "--offline",
+    metadata = json.loads(capture(root, "cargo", "metadata", "--locked",
                                   "--format-version", "1", "--filter-platform", "wasm32-unknown-unknown"))
     rustc = os.environ.get("RUSTC", "rustc")
     sysroot = Path(capture(root, rustc, "--print", "sysroot"))
