@@ -9,7 +9,7 @@ export async function instantiateSender(bytes, readAt, onHashProgress = () => {}
         try {
           const data = readAt(offset, length);
           if (!(data instanceof Uint8Array) || data.length !== length) {
-            throw new Error("文件读取长度不符");
+            throw new Error("File read returned an unexpected length.");
           }
           // memory.grow invalidates previous views: always create a fresh one.
           new Uint8Array(api.memory.buffer, pointer, length).set(data);
@@ -37,7 +37,7 @@ export async function instantiateSender(bytes, readAt, onHashProgress = () => {}
       const filename = new TextEncoder().encode(name);
       if (!Number.isSafeInteger(size) || size < 0 || !filename.length || filename.length > 255
           || !(session instanceof Uint8Array) || session.length !== 16) {
-        throw new Error("文件大小或文件名不受支持（文件名最多 255 个 UTF-8 字节）");
+        throw new Error("Unsupported file size or filename (maximum 255 UTF-8 bytes).");
       }
       readError = null;
       diagnostics.reads = 0;

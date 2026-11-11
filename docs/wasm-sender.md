@@ -12,13 +12,15 @@ From the repository root on Windows or Linux (Python 3.9+; use `python3` if need
 ```powershell
 rustup target add wasm32-unknown-unknown
 python scripts/build-web.py
-python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
 ```
 
-Open `http://127.0.0.1:18780` in a browser supporting WebAssembly, module Workers, FileReaderSync
-and Canvas 2D. Select a file, choose balanced (default) or robust, and start sending. Default FPS
+Open the generated `output/web-sender/index.html` directly in a browser (`file://`). It is a
+self-contained file: copy just this HTML file to another machine, with no server or sibling
+assets required. The page has a plain English demo UI with native form controls. The browser
+must support WebAssembly, classic Blob Workers, FileReaderSync and Canvas 2D.
+Select a file, choose balanced (default) or robust, and start sending. Default FPS
 is 15; default cell size is 8 physical pixels for balanced and 16 for robust. Fullscreen shows
-only the frame. Space pauses/continues, F11 toggles frame fullscreen, and Esc normally exits
+only the frame. Space pauses/resumes, F11 toggles frame fullscreen, and Esc normally exits
 browser fullscreen. The browser must allow the fullscreen request from a user action.
 
 On the receiving Windows desktop, build the native receiver and run:
@@ -42,14 +44,22 @@ The receiver's default 256 MiB limit still applies; larger files require an expl
 limit and sufficient receiver memory. File names must meet the protocol's 255-byte UTF-8 and
 path-character rules. Keep the input file unchanged until transmission ends.
 
-The generated `output/web-sender/` contains six static files and can be served by an ordinary
-HTTP server (localhost for local use) or an HTTPS static host. No runtime package installation, CDN, telemetry,
-server upload endpoint, shared filesystem or connection between sender and receiver is required.
-The page fetches its own JavaScript and WASM when starting a session. Starting another session
-requires those assets to remain accessible; offline asset caching is not implemented. `file://`
-is unsupported because of module loading/Worker restrictions. The build requires Rust, its WASM
-target and Python 3.9+ for the build script; Node is only needed for development tests. Python also
-provides an optional static server.
+The distribution contains only `index.html`. CSS and the main script are inline; the bridge and
+Worker are bundled into an escaped JSON script block, and WASM is embedded as base64. Starting
+a session creates a classic Worker from a Blob URL and sends it the selected File and embedded
+WASM. The Worker decodes and instantiates WASM from bytes, without `fetch`, module imports or
+`importScripts`. This avoids cross-origin local-file asset requests rather than disabling CORS.
+Stop/error cleanup terminates the Worker and revokes its Blob URL; restart works offline.
+
+HTTP/HTTPS hosting is still supported, for example with
+`python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender`.
+If a host sets a Content Security Policy, it must permit the inline scripts/styles, Blob Workers
+and WebAssembly compilation. Browser or organization policies can still restrict these APIs.
+No runtime package installation, CDN, telemetry, upload endpoint, shared filesystem or connection
+between sender and receiver is required. The build needs Rust, its WASM target and Python 3.9+;
+Node is only needed for development tests. Source files stay separate for editing; rebuild after
+changes rather than opening the source HTML template. Rebuilds remove only the obsolete generated
+JS/CSS/WASM assets from the previous multi-file distribution and preserve unrelated output files.
 
 ## Adapter and ABI
 
@@ -89,6 +99,7 @@ refresh, unique captured frames or remote video delivery. Worker/main-thread sch
 are entirely local and provide no transport ACK or adaptive feedback.
 
 API references: [W3C File API](https://www.w3.org/TR/FileAPI/),
+[embedded Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers#embedded_workers),
 [FileReaderSync](https://developer.mozilla.org/en-US/docs/Web/API/FileReaderSync),
 [session randomness](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues),
 [Rust WASM target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html).
@@ -102,7 +113,8 @@ python scripts/check-web.py # Requires Node.js 22+, plus the WASM Rust target.
 
 The host adapter tests verify bounded scans, random reads, metadata/source failure handling and
 both-profile SHA-verified recovery. `check-web.py` builds the actual release WASM, lints its WASM
-module, checks JS syntax, and invokes it through the production JS bridge in Node. Compiled WASM
+module, checks source and bundled classic JS syntax, and executes the embedded Worker/bridge
+with the embedded WASM in Node (using a bounded FileReaderSync stand-in, without network APIs). Compiled WASM
 cells are rendered and sampled by the native visual library and recovered by the native receiver.
 The helper independently compares SHA-256 and all bytes with the original test fixture. Empty,
 1 KiB, robust/balanced 1 MiB and balanced repair-only late joining are covered with deterministic
@@ -111,6 +123,8 @@ read failures, including a source becoming unreadable after hashing. All fixture
 ignored `output/`.
 
 Recorded implementation evidence is in [wasm-sender-20261002.md](benchmarks/wasm-sender-20261002.md).
+The [2026-11-11 demo validation](benchmarks/web-demo-20261111.md) covers the single-file build,
+offline `file://` operation in headless Chromium/Firefox, lifecycle controls and emulated DPI.
 Node tests are headless compatibility evidence; browser UI checks and native desktop regressions
 are separate. Browser-to-Windows physical screen capture and browser sender over real RDP need
 their own acceptance runs. Existing native remote benchmarks are not browser performance results.

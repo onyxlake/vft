@@ -1,6 +1,13 @@
 # Implementation status
 
-Updated 2026-11-09 (Asia/Shanghai). The original scope is preserved in [plan.md](plan.md).
+Updated 2026-11-11 (Asia/Shanghai). The original scope is preserved in [plan.md](plan.md).
+
+The browser sender now has a plain English demo UI and builds to one self-contained
+`output/web-sender/index.html`. Embedded WASM and a classic Blob Worker allow direct `file://`
+use without a server or external assets. Linux workspace checks, release builds, packaged
+WASM/native recovery and headless Chromium/Firefox offline UI checks pass. See
+[single-file demo validation](benchmarks/web-demo-20261111.md). Browser physical capture and
+real remote acceptance remain unverified; no M14 status change is implied.
 
 Both native receivers now accept optional `--output-dir DIR` (default: current working
 directory). Without `--output`, the manifest supplies the saved filename. Explicit output
@@ -29,7 +36,7 @@ Linux desktop capture and real remote acceptance were not rerun for this change.
 | M12 Windows sampling | Complete | Known grid alignment, sync validation, luminance calibration and sampling |
 | M13 local screen E2E | Complete | 1 KiB/1 MiB/100 MiB SHA matches; native repair-only late join and robust 16px test also pass |
 | M14 remote desktop | SHA-verified 1 MiB/100 MiB E2E; benchmark matrix partial | [Real RDP gateway lab](benchmarks/remote-rdp-lab-20261002.md): 9/10 windowed 1 MiB cases pass across baseline and netem conditions; repair-only joining passes; 100 MiB passes in 3499.663 s at 29.3 KiB/s. Earlier [user-reported pass](benchmarks/remote-auto-user-reported.md) is retained |
-| Requested WASM sender extension | Implemented; headless compatibility and browser UI checked | Worker bounded FileReaderSync reads, streaming SHA-256, existing core/Canvas, profiles/FPS/DPI/fullscreen/pause; [WASM/native E2E and browser evidence](benchmarks/wasm-sender-20261002.md). Browser-to-Windows physical capture and browser real RDP acceptance remain |
+| Requested WASM sender extension | Implemented; headless compatibility and browser UI checked | Worker bounded FileReaderSync reads, streaming SHA-256, existing core/Canvas, profiles/FPS/DPI/fullscreen/pause; [initial evidence](benchmarks/wasm-sender-20261002.md), [English single-file demo and offline Chromium/Firefox checks](benchmarks/web-demo-20261111.md). Browser-to-Windows physical capture and browser real RDP acceptance remain |
 | Manual repair / Windows TUI extension | Implemented; core, buffer, ConPTY and local screen checks; remote acceptance pending | VFR1 independent vector, generation progress, fair targeted scheduling, default English terminal controls and `--no-tui`; [local evidence and remaining checks](benchmarks/manual-repair-tui-20261002.md) |
 | Requested Linux Wayland extension | Implemented; headless, local Hyprland 1 KiB/1 MiB and Kitty TUI SHA-verified; broader acceptance pending | Native winit/softbuffer sender, ScreenCast portal/PipeWire receiver, shared TUI/manual repair, create-new output/preview/stats, interactive harness; [local Hyprland evidence](benchmarks/local-hyprland-20261016.md), [Kitty TUI evidence](benchmarks/linux-tui-20261016.md) and [remaining acceptance](linux-wayland.md) |
 

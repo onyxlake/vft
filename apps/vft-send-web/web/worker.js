@@ -4,16 +4,16 @@ let sender = null;
 self.onmessage = async ({ data }) => {
   try {
     if (data.type === "start") {
-      if (sender) throw new Error("发送会话已启动");
-      if (typeof FileReaderSync === "undefined") throw new Error("当前浏览器不支持 Worker 文件读取");
+      if (sender) throw new Error("A sender session is already active.");
+      if (typeof FileReaderSync === "undefined") throw new Error("This browser does not support file reads in a Worker.");
       const file = data.file;
       const reader = new FileReaderSync();
-      const response = await fetch(new URL("./vft_send_web.wasm", import.meta.url));
-      if (!response.ok) throw new Error(`WASM 加载失败：HTTP ${response.status}，请先构建网页`);
+      // The build embeds WASM in the page. Decode and compile it here, with no fetch.
+      const bytes = Uint8Array.from(atob(data.wasmBase64), char => char.charCodeAt(0));
       let lastProgress = -Infinity;
-      sender = await instantiateSender(await response.arrayBuffer(), (offset, length) => {
+      sender = await instantiateSender(bytes, (offset, length) => {
         if (!Number.isSafeInteger(offset) || offset < 0 || length > 65536 || offset + length > file.size) {
-          throw new Error("文件读取超出范围");
+          throw new Error("File read is out of bounds.");
         }
         return new Uint8Array(reader.readAsArrayBuffer(file.slice(offset, offset + length)));
       }, (done, total) => {
@@ -27,11 +27,11 @@ self.onmessage = async ({ data }) => {
         session: crypto.getRandomValues(new Uint8Array(16)) });
       self.postMessage({ type: "ready", ...info });
     } else if (data.type === "next") {
-      if (!sender) throw new Error("发送会话尚未就绪");
+      if (!sender) throw new Error("The sender session is not ready.");
       const frame = sender.next();
       self.postMessage({ type: "frame", ...frame }, [frame.cells.buffer]);
     } else {
-      throw new Error("未知发送指令");
+      throw new Error("Unknown sender command.");
     }
   } catch (error) {
     self.postMessage({ type: "error", message: String(error.message ?? error) });

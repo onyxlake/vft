@@ -1,8 +1,11 @@
 """Regression checks for command failures, portability and evidence preservation."""
 
+import base64
 import importlib.util
 import io
+import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -105,7 +108,8 @@ class DevelopmentScripts(unittest.TestCase):
         assets.mkdir(parents=True)
         names = ("index.html", "style.css", "app.js", "worker.js", "bridge.js")
         for name in names:
-            (assets / name).write_text(name)
+            (assets / name).write_text((vft_dev.ROOT / "apps/vft-send-web/web" / name).read_text(encoding="utf-8"),
+                                       encoding="utf-8")
         target = root / "custom target"
         for configuration in ("debug", "release"):
             wasm = target / "wasm32-unknown-unknown" / configuration / "vft_send_web.wasm"
@@ -114,16 +118,45 @@ class DevelopmentScripts(unittest.TestCase):
         distribution = root / "output/web-sender"
         distribution.mkdir(parents=True)
         (distribution / "keep.txt").write_text("unrelated")
+        # A rebuild upgrades the old multi-file distribution without touching other files.
+        for name in (*names[1:], "vft_send_web.wasm"):
+            (distribution / name).write_text("old asset")
+        def embedded_wasm():
+            html = (distribution / "index.html").read_text(encoding="utf-8")
+            return base64.b64decode(re.search(r'id="vft-wasm"[^>]*>(.*?)</script>', html).group(1), validate=True)
         with patch.object(build, "ROOT", root), patch.object(build, "target_directory", return_value=target), \
                 patch.object(build, "run") as command:
             build.build()
             self.assertIn("--release", command.call_args.args)
-            self.assertEqual((distribution / "vft_send_web.wasm").read_bytes(), b"release")
+            self.assertEqual(embedded_wasm(), b"release")
             build.build(debug=True)
             self.assertNotIn("--release", command.call_args.args)
-        self.assertEqual((distribution / "vft_send_web.wasm").read_bytes(), b"debug")
+        self.assertEqual(embedded_wasm(), b"debug")
         self.assertEqual((distribution / "keep.txt").read_text(), "unrelated")
-        self.assertEqual(set(item.name for item in distribution.iterdir()), {*names, "vft_send_web.wasm", "keep.txt"})
+        self.assertEqual(set(item.name for item in distribution.iterdir()), {"index.html", "keep.txt"})
+
+    def test_web_bundle_escapes_worker_html_and_rejects_changed_boundaries(self):
+        build = load_script("build-web")
+        assets = self.directory
+        for name in ("index.html", "style.css", "app.js", "worker.js", "bridge.js"):
+            (assets / name).write_text((vft_dev.ROOT / "apps/vft-send-web/web" / name).read_text(encoding="utf-8"),
+                                       encoding="utf-8")
+        delimiter = '// </ScRiPt><script>"quoted"</script>\n'
+        with (assets / "worker.js").open("a", encoding="utf-8") as stream:
+            stream.write(delimiter)
+        html = build.bundle(assets, b"\0asm\xff")
+        worker = re.search(r'id="vft-worker"[^>]*>(.*?)</script>', html).group(1)
+        self.assertNotIn("<", worker)
+        self.assertTrue(json.loads(worker).endswith(delimiter))
+        original = (assets / "index.html").read_text(encoding="utf-8")
+        for replacement in ("", "<!-- VFT_APP --><!-- VFT_APP -->"):
+            (assets / "index.html").write_text(original.replace("<!-- VFT_APP -->", replacement), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "exactly one web bundle marker"):
+                build.bundle(assets, b"wasm")
+        (assets / "index.html").write_text(original, encoding="utf-8")
+        (assets / "bridge.js").write_text("export async function renamed() {}", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "exactly one web bundle marker"):
+            build.bundle(assets, b"wasm")
 
     def test_web_check_stops_after_failed_wasm_build(self):
         check = load_script("check-web")

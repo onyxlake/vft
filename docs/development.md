@@ -9,8 +9,8 @@ resolve their working directory internally, so absolute script paths also work e
 | Python command | Purpose | Platforms |
 | --- | --- | --- |
 | `python scripts/check.py` | Script regression tests, Rust fmt/check/clippy/test; stops at first failure | Windows, Linux |
-| `python scripts/build-web.py` | Release WASM and six static assets in `output/web-sender/`; `--debug` selects debug WASM | Windows, Linux |
-| `python scripts/check-web.py` | WASM build/lint, JS syntax and actual WASM/native SHA-verified recovery | Windows, Linux |
+| `python scripts/build-web.py` | Self-contained `output/web-sender/index.html` with release WASM; `--debug` selects debug WASM | Windows, Linux |
+| `python scripts/check-web.py` | Single-file build, WASM lint, source/bundle JS syntax and embedded Worker/WASM/native SHA-verified recovery | Windows, Linux |
 | `python scripts/wayland-e2e.py` | Interactive portal selection, local Wayland transfer and independent SHA-256 | Linux Wayland desktop |
 | `python scripts/local-e2e.py` | Local screen capture and independent output hash comparison | Windows desktop |
 | `python scripts/check-tui-cli.py` | Six redirected CLI/TUI probes | Windows desktop |
@@ -28,8 +28,11 @@ cargo fmt --all
 python scripts/check.py
 rustup target add wasm32-unknown-unknown
 python scripts/check-web.py
-python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
 ```
+
+Open `output/web-sender/index.html` directly in a browser; it needs no local server or CORS
+exceptions. The HTML embeds all assets and runs a classic Blob Worker. An ordinary HTTP/HTTPS
+static host remains an option. See [browser requirements and packaging](wasm-sender.md).
 
 Linux development supports the portable Rust cores, headless tests, browser distribution and
 the [native Wayland extension](linux-wayland.md). Building the workspace on Linux now needs

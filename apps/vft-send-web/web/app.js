@@ -8,6 +8,7 @@ const scratchContext = scratch.getContext("2d", { alpha: false });
 let worker = null, state = "idle", info = null, current = null, pending = null, inFlight = false;
 let animation = 0, nextDue = 0, displayed = 0, sampleFrames = 0, sampleStart = 0, observedFps = 0;
 let image = null;
+let workerUrl = null;
 
 function controls() {
   const active = worker !== null;
@@ -16,11 +17,13 @@ function controls() {
   stop.disabled = !active;
   pause.disabled = !info || !active;
   fullscreen.disabled = !info || !active;
-  pause.textContent = state === "running" ? "暂停" : "继续";
+  pause.textContent = state === "paused" ? "Resume" : "Pause";
 }
 function reset(message, nextState = "idle") {
   worker?.terminate();
   worker = null;
+  if (workerUrl) URL.revokeObjectURL(workerUrl);
+  workerUrl = null;
   cancelAnimationFrame(animation);
   animation = 0;
   state = nextState;
@@ -29,10 +32,10 @@ function reset(message, nextState = "idle") {
   displayed = sampleFrames = observedFps = 0;
   canvas.hidden = true;
   $("placeholder").hidden = false;
-  $("placeholder").textContent = "发送画面将在这里显示";
+  $("placeholder").textContent = "The transfer frame will appear here.";
   $("dimensions").textContent = "";
-  $("digest").textContent = "准备文件后显示";
-  metrics.textContent = "已显示 0 帧 · 显示 FPS 0.0";
+  $("digest").textContent = "Available after preparing the file.";
+  metrics.textContent = "Displayed frames: 0 · Display FPS: 0.0";
   status.textContent = message;
   controls();
 }
@@ -48,8 +51,8 @@ function resize() {
   if (actualCell < 2) {
     canvas.hidden = true;
     $("placeholder").hidden = false;
-    $("placeholder").textContent = "窗口太小，请扩大窗口或进入全屏后继续";
-    setPaused("窗口太小，请扩大窗口或进入全屏后继续");
+    $("placeholder").textContent = "Window too small. Enlarge it or use fullscreen, then resume.";
+    setPaused("Window too small. Enlarge it or use fullscreen, then resume.");
     return false;
   }
   canvas.width = info.columns * actualCell;
@@ -57,7 +60,7 @@ function resize() {
   canvas.style.width = `${canvas.width / dpr}px`;
   canvas.style.height = `${canvas.height / dpr}px`;
   context.imageSmoothingEnabled = false;
-  $("dimensions").textContent = `${canvas.width} × ${canvas.height} px · ${actualCell} px / 单元`;
+  $("dimensions").textContent = `${canvas.width} × ${canvas.height} px · ${actualCell} px / cell`;
   if (current) paint(current);
   return true;
 }
@@ -99,14 +102,14 @@ function tick(now) {
       sampleStart = now;
       sampleFrames = 0;
     }
-    metrics.textContent = `已显示 ${displayed} 帧 · 显示 FPS ${observedFps.toFixed(1)} · 源符号 ${current.sources} / ${current.totalSources} · 修复符号 ${current.repairs}`;
+    metrics.textContent = `Displayed frames: ${displayed} · Display FPS: ${observedFps.toFixed(1)} · Source symbols: ${current.sources} / ${current.totalSources} · Repair symbols: ${current.repairs}`;
     status.textContent = current.sources >= current.totalSources
-      ? "正在发送修复帧 · 接收完成后可停止" : "正在发送文件";
+      ? "Sending repair frames. Stop when the receiver finishes." : "Sending file…";
   }
   requestFrame();
   animation = requestAnimationFrame(tick);
 }
-function setPaused(message = "已暂停 · 点击继续发送") {
+function setPaused(message = "Paused. Click Resume to continue.") {
   if (!info || !worker) return;
   state = "paused";
   cancelAnimationFrame(animation);
@@ -120,7 +123,7 @@ function play() {
   nextDue = performance.now();
   sampleFrames = observedFps = 0;
   sampleStart = performance.now();
-  status.textContent = "正在发送文件";
+  status.textContent = "Sending file…";
   controls();
   requestFrame();
   if (!animation) animation = requestAnimationFrame(tick);
@@ -128,52 +131,55 @@ function play() {
 start.onclick = () => {
   if (!file.files.length || !fps.checkValidity() || !cell.checkValidity()
       || !Number.isInteger(Number(fps.value)) || !Number.isInteger(Number(cell.value))) {
-    status.textContent = "请选择文件，并使用整数 FPS（1–60）和单元像素（2–32）";
+    status.textContent = "Select a file and use whole numbers for FPS (1–60) and pixels per cell (2–32).";
     return;
   }
   const selected = file.files[0];
-  reset("正在准备文件…");
+  reset("Preparing file…");
   state = "preparing";
   try {
-    const sessionWorker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    const source = JSON.parse($("vft-worker").textContent);
+    workerUrl = URL.createObjectURL(new Blob([source], { type: "text/javascript" }));
+    const sessionWorker = new Worker(workerUrl);
     worker = sessionWorker;
     controls();
     sessionWorker.onmessage = ({ data }) => {
       if (worker !== sessionWorker) return;
       if (data.type === "hash") {
-        status.textContent = `正在校验文件 ${data.total ? (data.done / data.total * 100).toFixed(0) : 100}%`;
+        status.textContent = `Hashing file: ${data.total ? (data.done / data.total * 100).toFixed(0) : 100}%`;
       } else if (data.type === "ready") {
         info = data;
         $("digest").textContent = data.sha256;
         state = "paused";
-        if (document.hidden) { controls(); status.textContent = "文件已就绪 · 返回页面后点击继续"; }
+        if (document.hidden) { controls(); status.textContent = "File ready. Return to this tab and click Resume."; }
         else play();
       } else if (data.type === "frame") {
         inFlight = false;
         pending = data;
-      } else if (data.type === "error") reset(`发送失败：${data.message}`, "error");
+      } else if (data.type === "error") reset(`Sending failed: ${data.message}`, "error");
     };
     sessionWorker.onerror = event => {
-      if (worker === sessionWorker) reset(`发送失败：${event.message}`, "error");
+      if (worker === sessionWorker) reset(`Sending failed: ${event.message}`, "error");
     };
-    sessionWorker.postMessage({ type: "start", file: selected, profile: Number(profile.value) });
-  } catch (error) { reset(`无法启动发送：${error.message}`, "error"); }
+    sessionWorker.postMessage({ type: "start", file: selected, profile: Number(profile.value),
+      wasmBase64: $("vft-wasm").textContent.trim() });
+  } catch (error) { reset(`Cannot start sending: ${error.message}`, "error"); }
 };
 pause.onclick = () => state === "running" ? setPaused() : play();
-stop.onclick = () => reset("已停止 · 可以重新选择文件");
-file.onchange = () => { status.textContent = file.files.length ? `已选择 ${file.files[0].name} · ${file.files[0].size.toLocaleString()} 字节` : "等待选择文件"; controls(); };
+stop.onclick = () => reset("Stopped. Select another file or start again.");
+file.onchange = () => { status.textContent = file.files.length ? `${file.files[0].name} · ${file.files[0].size.toLocaleString()} bytes` : "Select a file to begin."; controls(); };
 profile.onchange = () => { cell.value = profile.value === "0" ? 16 : 8; };
 async function toggleFullscreen() {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await stage.requestFullscreen();
-  } catch (error) { status.textContent = `无法进入全屏：${error.message}`; }
+  } catch (error) { status.textContent = `Cannot change fullscreen mode: ${error.message}`; }
 }
 fullscreen.onclick = toggleFullscreen;
 document.addEventListener("fullscreenchange", resize);
 window.addEventListener("resize", resize);
-document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused("页面已转入后台 · 返回后点击继续"); });
-window.addEventListener("pagehide", () => reset("已停止"));
+document.addEventListener("visibilitychange", () => { if (document.hidden) setPaused("Tab hidden. Return here and click Resume."); });
+window.addEventListener("pagehide", () => reset("Stopped."));
 document.addEventListener("keydown", event => {
   if (event.code === "F11" && !fullscreen.disabled) { event.preventDefault(); toggleFullscreen(); return; }
   if (["INPUT", "SELECT", "BUTTON"].includes(event.target.tagName)) return;

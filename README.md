@@ -135,18 +135,18 @@ Browser sender (build tools are needed only to create the static distribution):
 ```powershell
 rustup target add wasm32-unknown-unknown
 python scripts/build-web.py
-python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender
-# Open http://127.0.0.1:18780 in Edge, Chrome or Firefox; select a file and start sending.
+# Open output/web-sender/index.html directly in your browser; select a file and start sending.
 # On the receiving Windows desktop:
 ./target/release/vft-recv-win.exe --auto --output recovered.bin
 ```
 
-Use HTTP on localhost or HTTPS when hosting the generated static files; opening `index.html`
-through `file://` does not support module Workers. No file bytes are uploaded. The browser hashes
+The build produces one self-contained `index.html` with an English demo UI, embedded JavaScript,
+CSS and WASM. It runs directly through `file://` without a local server or external assets;
+HTTP/HTTPS hosting also works. No file bytes are uploaded. The browser hashes
 in 64 KiB slices and reads symbols on demand. Choose balanced/robust, FPS and physical pixels per
 cell, then keep the full Canvas visible; fullscreen provides more room. Small windows reduce
 cell size to fit (minimum 2 physical pixels). Hiding the tab pauses transmission; return and click
-Continue. Stop sending after the receiver reports SHA-verified completion.
+Resume. Stop sending after the receiver reports SHA-verified completion.
 
 See [browser sender details and validation](docs/wasm-sender.md). With Node.js 22+ installed,
 `python scripts/check-web.py` additionally verifies the compiled WASM against the native decoder,

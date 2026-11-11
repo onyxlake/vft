@@ -4,28 +4,58 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createContext, Script } from "node:vm";
 import { instantiateSender } from "../apps/vft-send-web/web/bridge.js";
 
 const root = resolve(import.meta.dirname, "..");
-const wasm = readFileSync(join(root, "output/web-sender/vft_send_web.wasm"));
+const html = readFileSync(join(root, "output/web-sender/index.html"), "utf8");
+const wasmBase64 = html.match(/id="vft-wasm"[^>]*>(.*?)<\/script>/s)[1];
+const wasm = Buffer.from(wasmBase64, "base64");
+const workerSource = JSON.parse(html.match(/id="vft-worker"[^>]*>(.*?)<\/script>/s)[1]);
+// Compile the generated scripts as classic JavaScript: stray imports/exports must fail.
+new Script(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1], { filename: "bundled-app.js" });
+const workerScript = new Script(workerSource, { filename: "bundled-worker.js" });
+assert.doesNotMatch(html, /<(?:script|link)\b[^>]*\b(?:src|href)\s*=/i);
+
+function bundledWorker() {
+  let messages;
+  const self = { postMessage: message => messages.push(message) };
+  // FileReaderSync is browser-only; model its bounded slice contract for this Node check.
+  // No fetch/importScripts is supplied: recovery must use only the embedded payload.
+  const context = createContext({ self, atob, crypto, performance, WebAssembly, Uint8Array,
+    TextEncoder, TextDecoder, FileReaderSync: class {
+      readAsArrayBuffer(slice) { assert(slice.byteLength <= 65536); return slice; }
+    } });
+  workerScript.runInContext(context);
+  return async data => {
+    messages = [];
+    await self.onmessage({ data });
+    return messages;
+  };
+}
 const verifier = process.argv[2] ?? join(root, "target/debug/examples", process.platform === "win32" ? "verify-frames.exe" : "verify-frames");
 const run = join(root, "output", `web-e2e-${Date.now()}`);
 mkdirSync(run, { recursive: true });
 const results = [];
 for (const [profile, size, repairOnly] of [[0, 0, false], [1, 1024, false], [0, 1048576, false], [1, 1048576, false], [1, 1048576, true]]) {
   const data = Uint8Array.from({ length: size }, (_, i) => (i * 17 + (i >> 8)) & 255);
-  const hashProgress = [];
-  const sender = await instantiateSender(wasm, (offset, length) => data.subarray(offset, offset + length),
-    (done, total) => hashProgress.push([done, total]));
-  const info = sender.init({ name: "测试.bin", size, profile, session: new Uint8Array(16).fill(7) });
+  const send = bundledWorker();
+  const startup = await send({ type: "start", profile, wasmBase64,
+    file: { name: "测试.bin", size, slice: (start, end) => data.slice(start, end).buffer } });
+  const info = startup.at(-1);
+  assert.equal(info.type, "ready", info.message);
   assert.equal(info.sha256, createHash("sha256").update(data).digest("hex"));
-  assert.deepEqual(hashProgress.at(-1), [size, size]);
+  const progress = startup.filter(message => message.type === "hash").at(-1);
+  assert.deepEqual([progress.done, progress.total], [size, size]);
   assert(info.maxRead <= 65536);
   const frames = [];
   const generations = Math.ceil(info.totalSources / 64);
   const maxFrames = Math.ceil(info.totalSources * 30 / 29) + generations * 64 * 4 + 60;
+  let diagnostics = info;
   for (let index = 0; index < maxFrames; index++) {
-    const frame = sender.next();
+    const frame = (await send({ type: "next" })).at(-1);
+    assert.equal(frame.type, "frame", frame.message);
+    diagnostics = frame;
     // Late join discards the entire systematic pass, including early manifests.
     if (repairOnly && frame.repairs === 0) continue;
     if (index % 7 === 3) continue; // deterministic erasure, independent of the packet type.
@@ -49,12 +79,18 @@ for (const [profile, size, repairOnly] of [[0, 0, false], [1, 1024, false], [0, 
   const result = spawnSync(verifier, [framesPath, inputPath], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   assert.match(result.stdout, /COMPLETE sha256=verified/);
-  const diagnostics = sender.info();
   assert(diagnostics.maxRead <= 65536);
   assert(diagnostics.memoryBytes < 8 * 1024 * 1024, "sender heap unexpectedly scales with input size");
-  results.push({ profile, size, repairOnly, ...diagnostics, recovery: result.stdout.trim() });
+  const { cells, ...stats } = diagnostics;
+  results.push({ profile, size, repairOnly, ...stats, recovery: result.stdout.trim() });
   console.log(`${label}: ${result.stdout.trim()} memory=${diagnostics.memoryBytes} maxRead=${diagnostics.maxRead}`);
 }
+const unready = bundledWorker();
+assert.match((await unready({ type: "next" })).at(-1).message, /not ready/);
+const badFile = bundledWorker();
+assert.match((await badFile({ type: "start", profile: 1, wasmBase64,
+  file: { name: "bad.bin", size: 1, slice() { throw new Error("unreadable file"); } } })).at(-1).message,
+  /unreadable file/);
 // Validate scalar ABI rejection and read failures, not just the Rust-host adapter.
 const api = await WebAssembly.instantiate(wasm, { vft: { read_at: () => 0, hash_progress: () => {} } });
 const raw = api.instance.exports;
