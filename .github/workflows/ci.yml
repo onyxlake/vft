@@ -153,7 +153,7 @@ jobs:
           destination = ROOT / 'output' / 'release'
           destination.mkdir(parents=True, exist_ok=True)
           files = [
-              (ROOT / 'output' / 'web-sender' / 'index.html', 'web-index.html'),
+              (ROOT / 'output' / 'web-sender' / 'index.html', 'index.html'),
               (target_directory() / 'wasm32-unknown-unknown' / 'release' / 'vft_send_web.wasm',
                'vft_send_web.wasm'),
           ]
@@ -194,7 +194,7 @@ jobs:
         shell: bash
         run: |
           set -o noclobber
-          assets=(vft-windows-x86_64.zip vft-linux-x86_64.tar.gz vft_send_web.wasm web-index.html web-THIRD-PARTY-NOTICES.txt)
+          assets=(vft-windows-x86_64.zip vft-linux-x86_64.tar.gz vft_send_web.wasm index.html web-THIRD-PARTY-NOTICES.txt)
           sha256sum "${assets[@]}" > SHA256SUMS.txt
           options=(--verify-tag --generate-notes --title "$RELEASE_TAG")
           if [[ "$RELEASE_TAG" == *-* ]]; then

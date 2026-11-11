@@ -71,10 +71,10 @@ Successful jobs retain these downloadable Actions artifacts for 14 days:
 | --- | --- |
 | `vft-windows-x86_64` | `vft-windows-x86_64.zip`: `vft-send-win.exe`, `vft-recv-win.exe`, README, license and technical guides |
 | `vft-linux-x86_64` | `vft-linux-x86_64.tar.gz`: `vft-send-linux`, `vft-recv-linux`, README, license and technical guides; executable permissions preserved |
-| `vft-web` | `web-index.html`, raw `vft_send_web.wasm` and `web-THIRD-PARTY-NOTICES.txt` |
+| `vft-web` | `index.html`, raw `vft_send_web.wasm` and `web-THIRD-PARTY-NOTICES.txt` |
 
-`web-index.html` is the generated self-contained `index.html` renamed for download; open it
-directly in a browser. It already embeds WASM and license notices. The separate WASM file is
+`index.html` is self-contained; open it directly in a browser. It already embeds WASM and
+license notices. The separate WASM file is
 for integrations using the [documented ABI](wasm-sender.md#adapter-and-abi); retain its companion
 notices when redistributing it. Native packages still need the documented Windows VC++ runtime
 or [Linux runtime dependencies](linux-wayland.md#build-and-runtime-requirements). Linux binaries
