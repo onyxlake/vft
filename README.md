@@ -77,6 +77,9 @@ rejected; Windows also rejects device names, invalid characters and trailing dot
 Use `--output` to choose a local name when needed. Recovered bytes are written only after
 SHA-256 verification, using create-new semantics. For a local sender and receiver sharing
 a directory, choose a different output directory or an explicit new filename.
+CLI and TUI logs escape control characters in transmitted filenames and other metadata,
+including when `--output` supplies a different local filename. The transmitted metadata itself
+is unchanged.
 
 In the receiver TUI, use Up/Down and PgUp/PgDn to inspect incomplete groups (numbers start at 1).
 Space selects a group, A selects the page, and C clears selection. R freezes a request snapshot

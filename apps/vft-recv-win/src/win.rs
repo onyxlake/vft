@@ -411,14 +411,16 @@ fn report(ui: Option<&ReceiveUi>, message: String) {
     if let Some(ui) = ui {
         ui.shared.lock().unwrap().log(&message);
     } else {
-        println!("{message}");
+        vft_tui::write_log_line(&mut std::io::stdout().lock(), &message)
+            .expect("failed to write receiver log");
     }
 }
 fn warn(ui: Option<&ReceiveUi>, message: String) {
     if let Some(ui) = ui {
         ui.shared.lock().unwrap().log(&message);
     } else {
-        eprintln!("{message}");
+        vft_tui::write_log_line(&mut std::io::stderr().lock(), &message)
+            .expect("failed to write receiver warning");
     }
 }
 fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {

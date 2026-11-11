@@ -220,7 +220,11 @@ impl App {
             if options.tui != Some(true) {
                 println!(
                     "filename={} size={} session={:02x?} profile={:?} fps={}",
-                    manifest.filename, size, session, options.profile, options.fps
+                    vft_tui::safe_text(&manifest.filename),
+                    size,
+                    session,
+                    options.profile,
+                    options.fps
                 );
             }
             Some(SenderSession::new(

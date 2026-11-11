@@ -47,6 +47,10 @@ pub fn safe_text(text: &str) -> String {
         .take(4096)
         .collect()
 }
+/// Write one terminal log line, escaping controls in metadata before adding the newline.
+pub fn write_log_line(writer: &mut impl std::io::Write, message: &str) -> std::io::Result<()> {
+    writeln!(writer, "{}", safe_text(message))
+}
 #[derive(Clone, Debug, Default)]
 pub struct Editor {
     pub text: String,
@@ -241,6 +245,48 @@ pub fn generate_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accepted_manifest_controls_cannot_escape_a_console_log_line() {
+        use vft_protocol::{Digest, Packet, PacketType, ProfileId, Sha256, SymbolId};
+        let manifest = Manifest {
+            session: [1; 16],
+            object: [2; 16],
+            filename: "文件\u{1b}]0;title\u{7}\nforged.bin".into(),
+            file_size: 1,
+            sha256: Sha256::digest([7]).into(),
+            symbol_size: 1,
+            source_symbols: 1,
+            profile: ProfileId::Balanced,
+        };
+        let packet = Packet {
+            session: manifest.session,
+            object: manifest.object,
+            kind: PacketType::Manifest,
+            symbol: SymbolId {
+                generation: 0,
+                index: 0,
+            },
+            profile: manifest.profile,
+            payload: manifest.encode().unwrap(),
+        };
+        let mut receiver = ReceiverSession::default();
+        receiver.push_packet(&packet.encode().unwrap()).unwrap();
+        let message = format!("filename={}", receiver.manifest().unwrap().filename);
+        let mut output = Vec::new();
+        write_log_line(&mut output, &message).unwrap();
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "filename=文件\\u{1b}]0;title\\u{7}\\nforged.bin\n"
+        );
+        let mut view = View::default();
+        view.log(&message);
+        assert_eq!(
+            view.logs.back().unwrap(),
+            "filename=文件\\u{1b}]0;title\\u{7}\\nforged.bin"
+        );
+        assert_eq!(receiver.manifest().unwrap().filename, manifest.filename);
+    }
+
     #[test]
     fn request_pages_are_frozen_bounded_and_use_fresh_ids() {
         use vft_protocol::{Digest, Packet, PacketType, ProfileId, Sha256, SymbolId};
