@@ -61,10 +61,12 @@ jobs:
       - name: Check shared cores without default features
         run: cargo check --locked -p vft-protocol -p vft-fec -p vft-visual -p vft-sender -p vft-receiver --no-default-features
       - name: Build release binaries
+        if: github.event_name != 'pull_request'
         run: cargo build --release --workspace --locked
       - name: Check for generated source changes
         run: git diff --exit-code
       - name: Package native sender and receiver
+        if: github.event_name != 'pull_request'
         shell: python
         run: |
           import sys
@@ -100,6 +102,7 @@ jobs:
                       for path, member in files:
                           archive.add(path, arcname=member)
       - name: Upload native build
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.artifact }}
@@ -141,6 +144,7 @@ jobs:
       - name: Check for generated source changes
         run: git diff --exit-code
       - name: Package WASM and self-contained HTML
+        if: github.event_name != 'pull_request'
         shell: python
         run: |
           import shutil
@@ -163,6 +167,7 @@ jobs:
           with (destination / 'web-THIRD-PARTY-NOTICES.txt').open('x', encoding='utf-8') as output:
               output.write(collect_notices(ROOT))
       - name: Upload web build
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vft-web

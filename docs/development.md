@@ -60,12 +60,15 @@ See [browser requirements and packaging](wasm-sender.md) for distributing the ge
 The [CI workflow](../.github/workflows/ci.yml) runs on pull requests, pushes to `master`,
 `v*` tags and manual dispatch. It uses the exact toolchain in `rust-toolchain.toml`.
 Windows Server 2022 x64 and Ubuntu 24.04 x64 runners execute `scripts/check.py`, check the
-shared cores without default features and build the workspace in release mode. A separate
+shared cores without default features and run the workspace's unit and headless E2E tests. A separate
 Ubuntu job checks the cores on WASM and runs `scripts/check-web.py` with Node.js 22.
+Pull requests run these check suites only: native release builds, release packaging and artifact
+uploads are skipped. The web check still compiles the WASM bundle needed for its headless E2E test.
 These are build and headless checks; they do not exercise desktop capture, portal selection,
 browser UI or real remote transfer.
 
-Successful jobs retain these downloadable Actions artifacts for 14 days:
+Master/tag pushes and manual runs also build the workspace in release mode, package the native
+and web outputs, and retain these downloadable Actions artifacts for 14 days:
 
 | Artifact | Contents |
 | --- | --- |
