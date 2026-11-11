@@ -60,6 +60,12 @@ on failures and interruption. Receiver timeouts have an additional 30-second lau
 Windows process measurements use ctypes; unavailable measurements remain blank. Movement targets
 only a visible window belonging to the test-owned sender, using physical pixel coordinates.
 
+The Windows sender's `--rect-file PATH` reserves a new file before opening its window.
+Existing files (including input-file aliases) are rejected. The sender retains the file handle
+and updates it only when the painted client rectangle changes. The file is initially empty;
+readers must wait for a complete newline-terminated `X Y WIDTH HEIGHT` record, not just file
+existence. The local harness waits for that record before starting capture.
+
 Both `local-e2e.py` and `wayland-e2e.py` accept `--output-mode explicit|metadata|current-dir`
 (default: `explicit`). Metadata mode creates an isolated receiving directory and supplies
 `--output-dir` without `--output`; current-dir mode launches the receiver in that directory

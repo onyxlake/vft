@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import vft_dev
 
@@ -73,6 +73,23 @@ class DevelopmentScripts(unittest.TestCase):
         result = subprocess.CompletedProcess([], 0, '{"target_directory": "custom target"}')
         with patch("vft_dev.subprocess.run", return_value=result):
             self.assertEqual(vft_dev.target_directory(), Path("custom target"))
+
+    def test_sender_readiness_requires_a_complete_rectangle_not_just_a_reserved_file(self):
+        module = load_script("local-e2e")
+        path = self.directory / "region.txt"
+        self.assertIsNone(module.read_rectangle(path))
+        for content in ("", "0 0", "0 0 384 216", "0 0 0 216\n", "not a rectangle\n"):
+            path.write_text(content, encoding="ascii")
+            self.assertIsNone(module.read_rectangle(path))
+        path.write_text("", encoding="ascii")
+        sender = Mock()
+        sender.poll.return_value = None
+        with patch.object(module.time, "sleep", side_effect=lambda _: path.write_text("-40 20 384 216\n")) as sleep:
+            self.assertEqual(module.wait_for_rectangle(path, sender), (-40, 20, 384, 216))
+        sleep.assert_called_once_with(0.1)
+        sender.poll.return_value = 1
+        with self.assertRaisesRegex(RuntimeError, "Sender exited"):
+            module.wait_for_rectangle(path, sender)
 
     def test_wayland_harness_refuses_missing_desktop_before_build_or_evidence(self):
         module = load_script("wayland-e2e")

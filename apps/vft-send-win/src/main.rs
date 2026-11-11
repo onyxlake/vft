@@ -1,3 +1,5 @@
+#[cfg(any(windows, test))]
+mod rect_file;
 #[cfg(windows)]
 mod win;
 fn main() {

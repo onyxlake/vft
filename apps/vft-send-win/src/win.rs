@@ -1,3 +1,4 @@
+use crate::rect_file::RectFile;
 use std::io::IsTerminal;
 use std::sync::{
     atomic::AtomicBool,
@@ -66,7 +67,7 @@ struct Options {
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\nESC exits; SPACE pauses; F11 toggles fullscreen.");
+        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--rect-file reserves a new file; existing files are never overwritten.\nESC exits; SPACE pauses; F11 toggles fullscreen.");
         return Ok(None);
     }
     let mut out = Options {
@@ -145,6 +146,7 @@ struct App {
     presented_frames: u64,
     error: Option<String>,
     filename: String,
+    rect_file: Option<RectFile>,
     controls: Option<Controls>,
 }
 struct Controls {
@@ -234,6 +236,11 @@ impl App {
         };
         let width = (grid.columns * options.cell_size) as i32;
         let height = (grid.rows * options.cell_size) as i32;
+        let rect_file = options
+            .rect_file
+            .as_deref()
+            .map(RectFile::create)
+            .transpose()?;
         let mut app = Self {
             sender,
             pixels: Vec::new(),
@@ -247,6 +254,7 @@ impl App {
             presented_frames: 0,
             error: None,
             filename,
+            rect_file,
             controls: None,
         };
         app.advance()?;
@@ -641,13 +649,12 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
                 );
                 let _ = EndPaint(hwnd, &paint);
                 app.presented_frames += 1;
-                if let Some(path) = &app.options.rect_file {
+                if let Some(rect_file) = &mut app.rect_file {
                     let mut origin = POINT::default();
                     let _ = ClientToScreen(hwnd, &mut origin);
-                    if let Err(error) = std::fs::write(
-                        path,
-                        format!("{} {} {} {}", origin.x, origin.y, rect.right, rect.bottom),
-                    ) {
+                    if let Err(error) =
+                        rect_file.update([origin.x, origin.y, rect.right, rect.bottom])
+                    {
                         app.error = Some(error.to_string());
                         let _ = DestroyWindow(hwnd);
                     }

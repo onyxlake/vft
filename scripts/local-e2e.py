@@ -9,6 +9,30 @@ from vft_dev import (LoggedProcess, evidence_directory, executable, main, nonneg
                      write_csv, write_fixture)
 
 
+def read_rectangle(path):
+    try:
+        text = path.read_text(encoding="ascii")
+        values = tuple(map(int, text.split()))
+    except (FileNotFoundError, UnicodeError, ValueError):
+        return None
+    if text.endswith("\n") and len(values) == 4 and values[2] > 0 and values[3] > 0:
+        return values
+    return None
+
+
+def wait_for_rectangle(path, sender, timeout=15):
+    deadline = time.monotonic() + timeout
+    while True:
+        if sender.poll() is not None:
+            raise RuntimeError(f"Sender exited; diagnostics: {path.parent}")
+        rectangle = read_rectangle(path)
+        if rectangle is not None:
+            return rectangle
+        if time.monotonic() > deadline:
+            raise RuntimeError("Sender window did not publish a complete rectangle in time")
+        time.sleep(0.1)
+
+
 def transfer(args, directory, target, size):
     from vft_windows import ProcessMetrics, move_sender
     input_path = directory / f"{size}-input.bin"
@@ -31,17 +55,11 @@ def transfer(args, directory, target, size):
             "--fps", args.fps, "--cell-size", args.cell_size, "--topmost", "--rect-file", rect_path,
         ], directory, f"{size}-sender"))
         sender_metrics = stack.enter_context(ProcessMetrics(sender))
-        deadline = time.monotonic() + 15
-        while not rect_path.exists():
-            if sender.poll() is not None:
-                raise RuntimeError(f"Sender exited; diagnostics: {directory}")
-            if time.monotonic() > deadline:
-                raise RuntimeError("Sender window did not paint in 15 seconds")
-            time.sleep(0.1)
+        wait_for_rectangle(rect_path, sender)
         time.sleep(args.join_delay_seconds)
         capture = [capture_mode]
         if args.manual_rect:
-            capture.extend(rect_path.read_text().split())
+            capture.extend(wait_for_rectangle(rect_path, sender))
         receiver = stack.enter_context(LoggedProcess([
             executable(target, "vft-recv-win"), *capture, "--no-tui", *output_options,
             "--fps", "120", "--timeout", args.timeout_seconds, "--stats", stats_path,
@@ -80,7 +98,7 @@ def transfer(args, directory, target, size):
         stats.update(receiver_metrics.values("receiver"))
         stats.update(sha256=actual, requested_fps=args.fps, cell_size=args.cell_size,
                      join_delay_seconds=args.join_delay_seconds, capture_mode=capture_mode,
-                     sender_moved=moved, capture_region=rect_path.read_text().strip(),
+                     sender_moved=moved, capture_region=" ".join(map(str, wait_for_rectangle(rect_path, sender))),
                      output_mode=args.output_mode)
         print(f"PASS size={size} SHA256={actual} goodput={stats['verified_goodput_bytes_per_second']} B/s")
         return stats
