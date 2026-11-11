@@ -22,4 +22,6 @@ canvas[hidden], #placeholder[hidden] { display: none; }
 #stage:fullscreen { width: 100vw; height: 100vh; background: #000; }
 footer { font-size: 13px; }
 footer p { margin: 8px 0; }
+footer details { margin-top: 8px; }
+#license-notices { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 24rem; overflow: auto; }
 output { display: block; font-family: monospace; overflow-wrap: anywhere; margin-top: 8px; }

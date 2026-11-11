@@ -51,6 +51,15 @@ WASM. The Worker decodes and instantiates WASM from bytes, without `fetch`, modu
 `importScripts`. This avoids cross-origin local-file asset requests rather than disabling CORS.
 Stop/error cleanup terminates the Worker and revokes its Blob URL; restart works offline.
 
+The same HTML also includes the VFT MIT license, full MIT notices for the locked WASM Cargo
+dependencies (including build dependencies), and the selected Rust toolchain's copyright and
+license texts. Open **Licenses and third-party notices** in the footer to read them offline.
+Toolchain notices are retained conservatively and may cover components not linked into WASM.
+The build reads dependency notices from Cargo's package sources and toolchain notices from
+`share/doc/rust` in the selected `rustc` sysroot. Missing notices or an unsupported dependency
+license stop the build; review license changes before extending `scripts/web_licenses.py`.
+Keep this embedded section when redistributing the single HTML file.
+
 HTTP/HTTPS hosting is still supported, for example with
 `python -m http.server 18780 --bind 127.0.0.1 --directory output/web-sender`.
 If a host sets a Content Security Policy, it must permit the inline scripts/styles, Blob Workers

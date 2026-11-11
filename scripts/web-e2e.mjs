@@ -16,6 +16,14 @@ const workerSource = JSON.parse(html.match(/id="vft-worker"[^>]*>(.*?)<\/script>
 new Script(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1], { filename: "bundled-app.js" });
 const workerScript = new Script(workerSource, { filename: "bundled-worker.js" });
 assert.doesNotMatch(html, /<(?:script|link)\b[^>]*\b(?:src|href)\s*=/i);
+const notices = html.match(/<pre id="license-notices"[^>]*>([\s\S]*?)<\/pre>/)[1];
+const projectLicense = readFileSync(join(root, "LICENSE"), "utf8").trim()
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+assert(notices.includes(projectLicense), "standalone HTML must retain the full VFT license");
+assert.match(notices, /generic-array [\d.]+ — MIT/);
+assert.match(notices, /Copyright \(c\) 2015 Bartłomiej Kamiński/);
+assert.match(notices, /Rust runtime — rustc/);
+assert.doesNotMatch(notices, /<[^>]+>/, "license text must not become HTML markup");
 
 function bundledWorker() {
   let messages;

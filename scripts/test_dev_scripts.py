@@ -13,6 +13,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import vft_dev
+import web_licenses
 
 
 def load_script(name):
@@ -142,12 +143,19 @@ class DevelopmentScripts(unittest.TestCase):
             html = (distribution / "index.html").read_text(encoding="utf-8")
             return base64.b64decode(re.search(r'id="vft-wasm"[^>]*>(.*?)</script>', html).group(1), validate=True)
         with patch.object(build, "ROOT", root), patch.object(build, "target_directory", return_value=target), \
-                patch.object(build, "run") as command:
+                patch.object(build, "run") as command, \
+                patch.object(build, "collect_notices", return_value="VFT license fixture") as notices:
             build.build()
             self.assertIn("--release", command.call_args.args)
             self.assertEqual(embedded_wasm(), b"release")
             build.build(debug=True)
             self.assertNotIn("--release", command.call_args.args)
+            artifact = (distribution / "index.html").read_text(encoding="utf-8")
+            self.assertIn("VFT license fixture", artifact)
+            notices.side_effect = ValueError("Missing license notice")
+            with self.assertRaisesRegex(ValueError, "Missing license notice"):
+                build.build()
+            self.assertEqual((distribution / "index.html").read_text(encoding="utf-8"), artifact)
         self.assertEqual(embedded_wasm(), b"debug")
         self.assertEqual((distribution / "keep.txt").read_text(), "unrelated")
         self.assertEqual(set(item.name for item in distribution.iterdir()), {"index.html", "keep.txt"})
@@ -161,19 +169,91 @@ class DevelopmentScripts(unittest.TestCase):
         delimiter = '// </ScRiPt><script>"quoted"</script>\n'
         with (assets / "worker.js").open("a", encoding="utf-8") as stream:
             stream.write(delimiter)
-        html = build.bundle(assets, b"\0asm\xff")
+        notices = '</pre><script>untrusted & text</script><!-- VFT_APP -->'
+        html = build.bundle(assets, b"\0asm\xff", notices)
+        self.assertIn('&lt;/pre&gt;&lt;script&gt;untrusted &amp; text&lt;/script&gt;', html)
+        self.assertNotIn(notices, html)
         worker = re.search(r'id="vft-worker"[^>]*>(.*?)</script>', html).group(1)
         self.assertNotIn("<", worker)
         self.assertTrue(json.loads(worker).endswith(delimiter))
         original = (assets / "index.html").read_text(encoding="utf-8")
-        for replacement in ("", "<!-- VFT_APP --><!-- VFT_APP -->"):
-            (assets / "index.html").write_text(original.replace("<!-- VFT_APP -->", replacement), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "exactly one web bundle marker"):
-                build.bundle(assets, b"wasm")
+        for marker in ("<!-- VFT_APP -->", "<!-- VFT_LICENSES -->"):
+            for replacement in ("", marker * 2):
+                (assets / "index.html").write_text(original.replace(marker, replacement), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "exactly one web bundle marker"):
+                    build.bundle(assets, b"wasm", notices)
         (assets / "index.html").write_text(original, encoding="utf-8")
         (assets / "bridge.js").write_text("export async function renamed() {}", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "exactly one web bundle marker"):
-            build.bundle(assets, b"wasm")
+            build.bundle(assets, b"wasm", notices)
+
+    def test_web_licenses_include_transitive_and_build_notices_but_not_dev_dependencies(self):
+        license_text = (vft_dev.ROOT / "LICENSE").read_text(encoding="utf-8")
+        packages = []
+        for name, license_id in (("vft-send-web", "MIT"), ("vft-core", "MIT"),
+                                 ("dual", "MIT OR Apache-2.0"), ("transitive", "MIT"),
+                                 ("build-helper", "MIT/Apache-2.0"), ("dev-only", "unsupported")):
+            directory = self.directory / name
+            directory.mkdir()
+            packages.append({"id": name, "name": name, "version": "1.2.3", "license": license_id,
+                             "manifest_path": str(directory / "Cargo.toml")})
+            if name not in ("vft-send-web", "vft-core", "dev-only"):
+                filename = "LICENSE" if license_id == "MIT" else "LICENSE-MIT"
+                (directory / filename).write_text(license_text, encoding="utf-8")
+        extra_notice = self.directory / "transitive/NOTICE"
+        extra_notice.write_text("Additional attribution: <author> & contributors", encoding="utf-8")
+        def dependency(name, kind=None):
+            return {"pkg": name, "dep_kinds": [{"kind": kind}]}
+        metadata = {"packages": packages, "workspace_members": ["vft-send-web", "vft-core"],
+                    "resolve": {"nodes": [
+                        {"id": "vft-send-web", "deps": [dependency("vft-core"), dependency("dual"),
+                                                         dependency("dev-only", "dev")]},
+                        {"id": "vft-core", "deps": [dependency("dual")]},
+                        {"id": "dual", "deps": [dependency("transitive"), dependency("build-helper", "build")]},
+                        {"id": "transitive", "deps": []}, {"id": "build-helper", "deps": []},
+                        {"id": "dev-only", "deps": []},
+                    ]}}
+        notices = web_licenses.dependency_notices(metadata)
+        self.assertEqual(len(notices), 3)
+        for name in ("dual", "transitive", "build-helper"):
+            self.assertTrue(any(text.startswith(f"{name} 1.2.3 — MIT\n") for text in notices))
+        self.assertTrue(all(license_text.strip() in text for text in notices))
+        self.assertIn(extra_notice.read_text(encoding="utf-8"), "\n".join(notices))
+        packages[2]["license"] = "unsupported"
+        with self.assertRaisesRegex(ValueError, "unsupported web dependency license"):
+            web_licenses.dependency_notices(metadata)
+        packages[2]["license"] = "MIT OR Apache-2.0"
+        (self.directory / "dual/LICENSE-MIT").unlink()
+        with self.assertRaisesRegex(ValueError, "Missing MIT license text"):
+            web_licenses.dependency_notices(metadata)
+
+    def test_web_licenses_preserve_modern_and_legacy_rust_toolchain_notices(self):
+        for modern in (True, False):
+            with self.subTest(modern=modern):
+                root = self.directory / str(modern)
+                docs = root / "share/doc/rust"
+                docs.mkdir(parents=True)
+                with self.assertRaisesRegex(ValueError, "copyright notices are missing"):
+                    web_licenses.toolchain_notices(root, "rustc test")
+                if modern:
+                    (docs / "COPYRIGHT-library.html").write_text(
+                        '<html><head><title>Heading</title></head><body><h1>Rust &amp; contributors</h1>'
+                        '<p>Copyright &lt;authors&gt;</p><pre>Permission text\n  retained.</pre></body></html>',
+                        encoding="utf-8")
+                    license_path = docs / "licenses/MIT.txt"
+                    license_path.parent.mkdir()
+                else:
+                    (docs / "COPYRIGHT").write_text("Rust & contributors\nCopyright <authors>\n"
+                                                  "Permission text\n  retained.", encoding="utf-8")
+                    license_path = docs / "LICENSE-MIT"
+                with self.assertRaisesRegex(ValueError, "license texts are missing"):
+                    web_licenses.toolchain_notices(root, "rustc test")
+                license_path.write_text("Toolchain license text", encoding="utf-8")
+                notices = "\n".join(web_licenses.toolchain_notices(root, "rustc test"))
+                for text in ("rustc test", "Rust & contributors", "Copyright <authors>",
+                             "Permission text\n  retained.", "Toolchain license text"):
+                    self.assertIn(text, notices)
+                self.assertNotIn("<body>", notices)
 
     def test_web_check_stops_after_failed_wasm_build(self):
         check = load_script("check-web")

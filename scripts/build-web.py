@@ -2,9 +2,11 @@
 
 import argparse
 import base64
+from html import escape
 import json
 import re
 from vft_dev import ROOT, main, run, target_directory
+from web_licenses import collect_notices
 
 
 def replace_once(source, marker, replacement):
@@ -13,7 +15,7 @@ def replace_once(source, marker, replacement):
     return source.replace(marker, replacement)
 
 
-def bundle(assets, wasm):
+def bundle(assets, wasm, notices):
     """Join this small, fixed module graph; fail if its declared boundaries change."""
     read = lambda name: (assets / name).read_text(encoding="utf-8")
     bridge = replace_once(read("bridge.js"), "export async function instantiateSender(",
@@ -27,6 +29,7 @@ def bundle(assets, wasm):
     html = read("index.html")
     for name, content in (
         ("STYLE", f"<style>\n{style}</style>"),
+        ("LICENSES", escape(notices, quote=False)),
         ("WORKER", f'<script id="vft-worker" type="application/json">{worker_json}</script>'),
         ("WASM", '<script id="vft-wasm" type="application/octet-stream">'
          + base64.b64encode(wasm).decode("ascii") + '</script>'),
@@ -44,7 +47,7 @@ def build(debug=False):
     target = target_directory()
     configuration = "debug" if debug else "release"
     wasm = (target / "wasm32-unknown-unknown" / configuration / "vft_send_web.wasm").read_bytes()
-    html = bundle(ROOT / "apps" / "vft-send-web" / "web", wasm)
+    html = bundle(ROOT / "apps" / "vft-send-web" / "web", wasm, collect_notices(ROOT))
     destination = ROOT / "output" / "web-sender"
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "index.html").write_text(html, encoding="utf-8")
