@@ -5,35 +5,19 @@ These instructions apply to the entire repository. Follow the user's current req
 ## Start here
 
 - Inspect `git status --short` and the relevant diff before editing.
-- Read [README.md](README.md) for usage and [docs/status.md](docs/status.md) for current progress and limitations.
-- Current support and limitations are in [docs/status.md](docs/status.md); the checkpoint workflow is below. Consult [docs/architecture.md](docs/architecture.md), [docs/protocol.md](docs/protocol.md), and [docs/visual-format.md](docs/visual-format.md) for changes to their respective components.
+- Read [README.md](README.md) for usage and limitations. Consult [docs/architecture.md](docs/architecture.md), [docs/protocol.md](docs/protocol.md), and [docs/visual-format.md](docs/visual-format.md) for changes to their respective components.
 - Work in small, testable logical units. Keep changes focused; do not overwrite, stage, or revert unrelated work.
-- Update documentation when behavior, wire format, commands, validation evidence, or limitations change.
+- Keep repository documentation focused on technical references, usage and architecture. Update it when behavior, wire format, commands or limitations change. Keep measurement records, audit logs and run histories under ignored `output/`.
 
 ## Architecture and scope
 
 VFT transfers files through independent visual frames over a simplex channel. Successful recovery must not require ACKs, a shared filesystem, a network connection between endpoints, or capture-order continuity.
 
-| Component | Responsibility |
-| --- | --- |
-| `crates/vft-protocol` | Explicit packet/manifest encoding, CRC32C, SHA-256, validation |
-| `crates/vft-fec` | Deterministic source/repair symbols and generation decoding |
-| `crates/vft-visual` | Binary/four-level frame layout, rendering, calibration and sampling |
-| `crates/vft-sender` | Random-access object source and manifest/source/repair scheduling |
-| `crates/vft-receiver` | Session discovery, symbol collection, recovery and verified completion |
-| `crates/vft-testkit` | Seeded simulation and headless integration tooling |
-| `apps/vft-send-win` | File adapter, CLI and native Win32/GDI presentation |
-| `apps/vft-recv-win` | Physical screen capture, CLI, diagnostics and verified file output |
-| `apps/vft-linux` | Shared std file/pixel/recovery adapters for Linux applications |
-| `apps/vft-send-linux` | Native Wayland winit/softbuffer presentation and terminal controls |
-| `apps/vft-recv-linux` | ScreenCast portal/PipeWire capture, discovery and verified output |
-| `apps/vft-send-web` | WASM adapter, bounded Worker File API source and physical-pixel Canvas presentation |
-
 The five protocol/FEC/visual/sender/receiver libraries are `no_std + alloc`. Keep filesystem, OS, capture and UI APIs in adapters. `vft-testkit` may use `std`. Keep Windows dependencies target-specific.
 
 Respect the workspace's declared Rust version and edition in `Cargo.toml`. A successful build on a newer compiler does not establish minimum-version compatibility. Avoid adding dependencies or platform requirements without a concrete need.
 
-Supported adapters target Windows 10/11 x64, Linux Wayland and browser sending. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [docs/status.md](docs/status.md) before changing portability boundaries.
+Supported adapters target Windows 10/11 x64, Linux Wayland and browser sending. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [README limitations](README.md#limitations) before changing portability boundaries.
 
 Keep browser sender file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
 
@@ -98,16 +82,15 @@ If the sandbox cannot use the normal Cargo cache, the ignored project-local cach
 $env:CARGO_HOME = Join-Path (Get-Location) '.build\cargo'
 ```
 
-Keep generated fixtures, capture images and logs under ignored `output/`; keep build/cache artifacts under `target/` and `.build/`. Commit only intentional small golden vectors and documented measurement records.
+Keep generated fixtures, capture images, measurement records and logs under ignored `output/`; keep build/cache artifacts under `target/` and `.build/`. Commit only intentional small golden vectors needed by tests.
 
-## Benchmarks and validation evidence
+## Test reporting
 
-- Consult [docs/benchmarks.md](docs/benchmarks.md) for recorded measurements and [docs/remote-validation.md](docs/remote-validation.md) for remote acceptance procedures.
-- Simulation, local desktop and real remote desktop results are separate evidence. Local success cannot complete remote acceptance or establish the remote 40–100 KB/s target. Check the current status document before reporting completion.
+- Keep simulation, local desktop and real remote desktop results separate. Local success does not establish remote compatibility or throughput.
 - Verify recovered bytes with an independent SHA-256 comparison. Report payload goodput only for verified successful runs; failed runs have zero verified goodput.
 - Record configuration, elapsed time, units, actual observed frame rate, CPU and memory when available. Requested FPS is not observed unique-frame rate. Leave unmeasured values unknown.
 - Interpret counters according to the documented definitions. Source/repair capture counts include duplicates; capture rejection is not video frame loss. Do not invent bitrate, symbol error rate or remote-session settings.
-- Preserve failed-run diagnostics and describe relevant limitations honestly. Update status only when the required evidence exists.
+- Preserve failed-run diagnostics under ignored `output/` and describe relevant limitations honestly.
 
 ## Checkpoints and tool hygiene
 

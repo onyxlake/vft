@@ -109,54 +109,14 @@ settings are unmeasured. Failed runs retain diagnostics and attempt to save stat
 
 ## Terminal controls
 
-Both applications reuse the Windows English TUI and optional VFR1 manual repair flow.
-Interactive stdin/stdout select TUI by default; `--no-tui` forces script-friendly CLI,
-and `--tui` requires both terminals. The sender terminal supports R to enter/preview/
-apply a request, Space to pause, X to cancel unsent repairs, Q/Ctrl+C to quit. The
-receiver supports group selection, R to freeze requests and P for the copy view.
-See [terminal controls](terminal-controls.md). Capture continues while reading a request; verified
-completion remains in TUI until Q, whereas ordinary CLI exits automatically.
+Both applications use the shared [terminal controls and optional manual repair](terminal-controls.md).
+Interactive stdin/stdout select TUI by default; `--no-tui` selects ordinary CLI. Capture continues
+while reading a request, and verified TUI completion remains visible until Quit.
+Keep the terminal outside the visual frame. D-Bus/PipeWire are local capture APIs; no network
+connection or feedback channel between endpoints is required.
 
-[Kitty/Hyprland TUI validation](benchmarks/linux-tui-20261016.md) passes a SHA-verified
-1 MiB transfer with default TUI selection, pause/resume, resize recovery, Unicode/paste
-editing, request apply/cancel/duplicate handling, copy view and graceful exit restoration.
-Completion publishes final verified byte/hash/group counters and keeps the output path in
-scrollable result text, including when returning to the frozen request panel. Closing the
-sender editor clears stale preview notices. Physical-keyboard and broader TUI acceptance remain.
-
-Keep the terminal away from the visible frame. Raw mode, alternate screen and cursor
-are restored on ordinary errors/unwind; forced termination cannot promise restoration.
-No clipboard, shared filesystem, network connection between endpoints or feedback is
-required by the transport. D-Bus/PipeWire are local capture APIs only.
-
-## Verification
-
-Headless regression coverage includes both profiles, repair-only late joining across
-multiple generations, dropped/reordered/duplicate captures, padded RGB conversion,
-negative stride and malformed buffer bounds, moved/resized frames, foreign sessions,
-empty files, resource limits and create-new verified output/preview behavior. Callback
-panic containment and cancellation/timeout polling are tested without opening a portal.
-The existing workspace checks and release build remain required.
-
-The [dependency baseline](dependencies.md) records compiler and headless checks. Separate
-[local desktop measurements](benchmarks/local-hyprland-20261016.md) record independent SHA-256
-matches for 1 KiB and 1 MiB on Hyprland 0.56.2 at the tested revision. To run the interactive
-harness after building release binaries:
-
-```sh
-python3 scripts/wayland-e2e.py --sizes 1024 1048576 --fps 30 --cell-size 4 --skip-build
-# Additional acceptance: robust, late joining, empty file, move/cover/reveal,
-# fractional/mixed DPI, manual rectangle, portal denial/revocation, TUI controls.
-python3 scripts/wayland-e2e.py --sizes 1024 --profile robust --cell-size 16 --join-delay-seconds 5 --skip-build
-```
-
-The harness opens the sender and then the portal; the user selects a window/monitor
-for each size. It creates unique evidence under ignored `output/`, preserves failed
-logs and previews, compares input/output SHA-256 independently, and stops only children
-it started. Unknown CPU/memory/display FPS fields stay blank. Movement/occlusion and
-broader TUI interaction need additional testing. The recorded passes establish local Wayland
-evidence for that configuration; cross-platform screen transfer and real remote acceptance remain
-separate from compilation and synthetic recovery. See [support and limitations](status.md).
+The [build and test guide](development.md) covers workspace checks and the interactive
+`wayland-e2e.py` harness.
 
 References: [ScreenCast portal specification](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html),
 [pipewire-rs examples](https://gitlab.freedesktop.org/pipewire/pipewire-rs/-/tree/0.10.1/pipewire/examples),

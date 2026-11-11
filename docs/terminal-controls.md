@@ -65,6 +65,4 @@ overlap, and deficits must be between 1 and the group's actual source count. Inp
 to 4096 bytes and 256 expanded targets. See the [VFR1 contract](protocol.md#optional-manual-repair-text-vfr1).
 
 Manual repair is optional: recovery still works without a return channel. Budgets are heuristics
-and may require another request. [Windows terminal validation](benchmarks/manual-repair-tui-20261002.md)
-and [Linux terminal validation](benchmarks/linux-tui-20261016.md) record local functional checks;
-remote manual-operation timings and a measured performance improvement remain unverified.
+and may require another request.

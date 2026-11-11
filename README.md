@@ -9,11 +9,6 @@ Native sender/receiver applications are available for Windows 10/11 x64 and Linu
 A browser sender runs from a self-contained HTML file. The five shared Rust cores use
 `no_std + alloc`; the current wire format is VFT v0.
 
-Real RDP transfers have recovered 1 MiB and 100 MiB files. The sustained 100 MiB result was
-29.3 KiB/s, below the 40–100 decimal KB/s target. Remote validation remains partial, and browser
-physical capture and Linux remote acceptance remain unverified. See
-[support and limitations](docs/status.md) and [measurements](docs/benchmarks.md).
-
 ## Build requirements
 
 - Rust **1.99.1** or newer; `rust-toolchain.toml` pins 1.99.1, rustfmt, Clippy and the WASM target.
@@ -93,6 +88,19 @@ Space pauses the sender, Q or Ctrl+C exits the TUI, and verified receiver result
 until Quit. Optional manual repair requests use R on both ends. The visual window has its own
 Esc/Space/F11 controls and must remain clear of the terminal. See [terminal controls](docs/terminal-controls.md).
 
+## Limitations
+
+- Capture needs a complete, axis-aligned frame with at least two physical pixels per cell.
+  Rotation, camera perspective and partial-frame recovery are unsupported. Capture dimensions
+  are limited to 8192 pixels per axis.
+- Recovery keeps file data in memory; disk-backed recovery is unavailable. `--preview` saves
+  one diagnostic BMP, not a live preview window.
+- CRC32C and SHA-256 detect corruption but provide no sender authentication or encryption.
+  The FEC has no fixed packet-count recovery guarantee, and requested FPS is not delivered FPS.
+- Network transport, automatic feedback adaptation, archives, Android and browser receivers
+  are not implemented. Browser-to-native physical capture and Linux remote desktop compatibility
+  remain unverified.
+
 ## Documentation
 
 | Guide | Contents |
@@ -103,9 +111,7 @@ Esc/Space/F11 controls and must remain clear of the terminal. See [terminal cont
 | [Browser sender](docs/wasm-sender.md) | Offline HTML distribution, lifecycle and WASM ABI |
 | [Protocol](docs/protocol.md) / [visual format](docs/visual-format.md) | Wire encoding, FEC and exact luminance layout |
 | [Architecture](docs/architecture.md) | Core and adapter responsibilities |
-| [Development](docs/development.md) / [dependencies](docs/dependencies.md) | Build setup, checks, scripts and toolchain baseline |
-| [Support and limitations](docs/status.md) | Implemented features and validation boundaries |
-| [Measurements](docs/benchmarks.md) / [remote validation](docs/remote-validation.md) | Recorded results and reproducible measurement procedures |
+| [Build and test guide](docs/development.md) | Toolchain setup, checks and development scripts |
 
 Run `python scripts/check.py` for Python regressions and Rust format/check/Clippy/tests.
 With Node.js 22+ installed, `python scripts/check-web.py` also checks packaged WASM/native recovery.

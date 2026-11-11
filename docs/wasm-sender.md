@@ -117,27 +117,5 @@ API references: [W3C File API](https://www.w3.org/TR/FileAPI/),
 [session randomness](https://developer.mozilla.org/en-US/docs/Web/API/Crypto/getRandomValues),
 [Rust WASM target](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html).
 
-## Verification
-
-```powershell
-python scripts/check.py
-python scripts/check-web.py # Requires Node.js 22+, plus the WASM Rust target.
-```
-
-The host adapter tests verify bounded scans, random reads, metadata/source failure handling and
-both-profile SHA-verified recovery. `check-web.py` builds the actual release WASM, lints its WASM
-module, checks source and bundled classic JS syntax, and executes the embedded Worker/bridge
-with the embedded WASM in Node (using a bounded FileReaderSync stand-in, without network APIs). Compiled WASM
-cells are rendered and sampled by the native visual library and recovered by the native receiver.
-The helper independently compares SHA-256 and all bytes with the original test fixture. Empty,
-1 KiB, robust/balanced 1 MiB and balanced repair-only late joining are covered with deterministic
-erasures, duplicate frames and batch reordering. The scalar ABI rejects malformed arguments and
-read failures, including a source becoming unreadable after hashing. All fixtures/logs stay in
-ignored `output/`.
-
-Earlier adapter validation is recorded in [wasm-sender-20261002.md](benchmarks/wasm-sender-20261002.md).
-The [2026-11-11 demo validation](benchmarks/web-demo-20261111.md) covers the single-file build,
-offline `file://` operation in headless Chromium/Firefox, lifecycle controls and emulated DPI.
-Node tests are headless compatibility evidence; browser UI checks and native desktop regressions
-are separate. Browser-to-Windows physical screen capture and browser sender over real RDP need
-their own acceptance runs. Existing native remote benchmarks are not browser performance results.
+Build and test commands, including packaged WASM/native recovery, are in the
+[build and test guide](development.md).

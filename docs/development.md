@@ -1,9 +1,10 @@
-# Development on Windows and Linux
+# Build and test guide
 
 The repository's development entry points use Python 3.9+ and its standard library.
 No pip packages or PowerShell installation are required. Rust 1.99.1 is the minimum supported
-version and the pinned toolchain in `rust-toolchain.toml`; rustup installs rustfmt, Clippy and
-`wasm32-unknown-unknown` with it. Browser checks also need Node.js 22+. On Linux, substitute `python3`
+version and the pinned toolchain in `rust-toolchain.toml`; the workspace uses edition 2021.
+`Cargo.toml` declares dependencies and `Cargo.lock` pins their resolved versions. Rustup installs
+rustfmt, Clippy and `wasm32-unknown-unknown` with it. Browser checks also need Node.js 22+. On Linux, substitute `python3`
 for `python` when necessary. Script paths below are relative to the repository root; scripts
 resolve their working directory internally, so absolute script paths also work elsewhere.
 
@@ -16,10 +17,8 @@ Windows import libraries; installing Rust alone is insufficient. See the officia
 
 When copying a default MSVC release executable to another machine, provide the matching x64
 [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
-Its runtime version must be at least as recent as the build tools used. A fresh VM in the
-[recorded RDP lab](benchmarks/remote-rdp-lab-20261002.md) failed with `0xC0000135` until a separate
-static-CRT sender build was used. Static CRT is an explicit build choice, not the workspace default;
-record build flags and executable hashes when distributing or measuring such a build.
+Its runtime version must be at least as recent as the build tools used. Default MSVC builds
+use the dynamic CRT; static CRT requires an explicit build configuration.
 
 PowerShell commands must include the executable path unless it is on PATH: use
 `.\target\release\vft-send-win.exe` from the repository root, or `.\vft-send-win.exe` from a
@@ -35,33 +34,38 @@ directory containing a copied binary. See [PowerShell command resolution](https:
 | `python scripts/wayland-e2e.py` | Interactive portal selection, local Wayland transfer and independent SHA-256 | Linux Wayland desktop |
 | `python scripts/local-e2e.py` | Local screen capture and independent output hash comparison | Windows desktop |
 | `python scripts/check-tui-cli.py` | Six redirected CLI/TUI probes | Windows desktop |
-| `python scripts/remote-benchmark.py` | Manual-rectangle remote capture and benchmark evidence | Windows desktop |
+| `python scripts/remote-benchmark.py` | Manual-rectangle remote capture and diagnostics | Windows desktop |
 
 Each entry point supports `--help`. Arguments use lowercase kebab case, such as `--skip-build`
 and `--cell-size`; `--sizes` takes space-separated integers. Cargo's configured target directory,
-including `CARGO_TARGET_DIR`, is resolved through
-`cargo metadata`. Relative Cargo configuration is evaluated from the repository root.
-Historical benchmark records retain the PowerShell commands actually used for those measurements.
+including `CARGO_TARGET_DIR`, is resolved through `cargo metadata`. Relative Cargo configuration
+is evaluated from the repository root.
 
 ```text
 cargo fmt --all
 python scripts/check.py
 rustup target add wasm32-unknown-unknown
 python scripts/check-web.py
+git diff --check
 ```
 
-Open `output/web-sender/index.html` directly in a browser; it needs no local server or CORS
-exceptions. The HTML embeds all assets and runs a classic Blob Worker. An ordinary HTTP/HTTPS
-static host remains an option. See [browser requirements and packaging](wasm-sender.md).
+`check-web.py` requires Node.js 22+. It builds and lints the WASM adapter, checks source/bundled
+JavaScript syntax, and runs the embedded Worker/WASM in Node with a bounded FileReaderSync stand-in.
+The native visual/receiver cores render, sample and recover its frames, then independently compare
+bytes and SHA-256. This is a headless check; browser UI and physical capture need separate testing.
+See [browser requirements and packaging](wasm-sender.md) for distributing the generated HTML.
+
+## Desktop tests
 
 Linux development supports the portable Rust cores, headless tests, browser distribution and
 the [native Wayland applications](linux-wayland.md). Building the workspace on Linux needs
 PipeWire/SPA development packages, pkg-config, a C compiler and libclang. Windows desktop
-scripts still fail before building or creating evidence on Linux; use `wayland-e2e.py` for
-the Linux adapter. It opens a real window and ScreenCast picker, where the capture source must
-be selected interactively. [Local Hyprland measurements](benchmarks/local-hyprland-20261016.md)
-record SHA-verified 1 KiB/1 MiB transfers.
-A WASM/native headless pass does not establish browser screen capture or real remote acceptance.
+scripts fail before building or creating output on Linux. Use `wayland-e2e.py` in a Wayland
+desktop session and select the sender window or monitor in the portal for each file size:
+
+```sh
+python3 scripts/wayland-e2e.py --sizes 1024 1048576 --fps 30 --cell-size 4
+```
 
 On an unlocked Windows desktop:
 
@@ -69,9 +73,6 @@ On an unlocked Windows desktop:
 python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4
 python scripts/local-e2e.py --sizes 1048576 --fps 60 --cell-size 4 --auto-locate --move-sender
 python scripts/check-tui-cli.py --skip-build
-# Metadata filename in a selected directory, then in the receiver's working directory:
-python scripts/local-e2e.py --sizes 1024 1048576 --fps 60 --cell-size 4 --output-mode metadata --skip-build
-python scripts/local-e2e.py --sizes 1024 --fps 60 --cell-size 4 --output-mode current-dir --skip-build
 ```
 
 Native harnesses create unique directories under ignored `output/`, use create-new fixtures,
@@ -81,11 +82,8 @@ the receiver timeout; `wayland-e2e.py` allows 15 additional seconds.
 Windows process measurements use ctypes; unavailable measurements remain blank. Movement targets
 only a visible window belonging to the test-owned sender, using physical pixel coordinates.
 
-The Windows sender's `--rect-file PATH` reserves a new file before opening its window.
-Existing files (including input-file aliases) are rejected. The sender retains the file handle
-and updates it only when the painted client rectangle changes. The file is initially empty;
-readers must wait for a complete newline-terminated `X Y WIDTH HEIGHT` record, not just file
-existence. The local harness waits for that record before starting capture.
+The Windows local harness waits for a complete newline-terminated `--rect-file` record before
+starting capture; see the [sender CLI reference](cli.md#sender) for its create-new semantics.
 
 Both `local-e2e.py` and `wayland-e2e.py` accept `--output-mode explicit|metadata|current-dir`
 (default: `explicit`). Metadata mode creates an isolated receiving directory and supplies
@@ -93,18 +91,22 @@ Both `local-e2e.py` and `wayland-e2e.py` accept `--output-mode explicit|metadata
 with neither output option. Each mode independently compares the recovered file's SHA-256
 with the source. The Linux harness requires interactive portal selection.
 
-New local fixtures use `VFT-python-fixture-v1`: for each 64 KiB chunk starting at byte offset N,
+Local fixtures use `VFT-python-fixture-v1`: for each 64 KiB chunk starting at byte offset N,
 take the required bytes from SHAKE-256 of ASCII `VFT-python-fixture-v1:N`. This is deterministic
-across Windows and Linux, bounded to one chunk, and intentionally differs from historical
-`.NET Random(20260930)` fixtures. Historical recorded hashes and timings remain unchanged;
-new runs independently compare input/output SHA-256. `--join-delay-seconds` can test late joining.
-Remote benchmarks accept an optional `--expected-sha256` from the sender for independent comparison;
-without it, the receiver still verifies the manifest SHA, but the harness lacks a separate source hash.
+across Windows and Linux and bounded to one chunk. `--join-delay-seconds` can test late joining.
+Desktop capture requires an unlocked session and a visible, unobscured frame. Use `--topmost`
+for the Windows sender where needed; overlays can still obscure it.
 
-## Validation boundaries
+For a remote Windows sender, start the sender on that machine and run `remote-benchmark.py`
+locally with the exact frame rectangle. For example, replace these coordinates and the hash
+with values for the displayed frame and original file:
 
-See [dependencies](dependencies.md) for the dated toolchain-baseline checks and
-[measurements](benchmarks.md) for physical capture results. Running a remote benchmark launcher
-against a local sender tests the launcher, not a remote transport. Workspace, headless browser,
-local desktop and real remote results must be recorded separately. Preserve failed-run diagnostics;
-verified goodput is zero when recovery fails. Desktop capture requires a visible, unobscured frame.
+```powershell
+python scripts/remote-benchmark.py --x 50 --y 80 --width 1536 --height 864 --profile balanced --sender-fps 15 --cell-size 8 --transport RDP --codec unknown --expected-sha256 THE_HASH_FROM_THE_SENDER
+```
+
+The script does not communicate with the sender. `--expected-sha256` supplies an independent
+source hash; omitting it still checks the manifest SHA but provides no separate source comparison.
+Generated CSVs, configuration, logs and previews stay under ignored `output/`.
+Verified goodput is original bytes divided by receiver elapsed time and is zero on failure.
+Requested FPS, duplicate captures and decode rejections do not measure video frame loss.
