@@ -594,7 +594,8 @@ unsafe fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -
     unsafe {
         if msg == WM_NCCREATE {
             let create = &*(lparam.0 as *const CREATESTRUCTW);
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as isize);
+            // The SDK aliases this API to an i32 LONG on x86 and an isize on x64.
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, create.lpCreateParams as _);
             return DefWindowProcW(hwnd, msg, wparam, lparam);
         }
         if msg == WM_DESTROY {
@@ -729,7 +730,7 @@ unsafe fn toggle_fullscreen(hwnd: HWND, app: &mut App) -> AppResult<()> {
             if !GetMonitorInfoW(monitor, &mut info).as_bool() {
                 return Err("GetMonitorInfoW failed".into());
             }
-            SetWindowLongPtrW(hwnd, GWL_STYLE, WS_POPUP.0 as isize);
+            SetWindowLongPtrW(hwnd, GWL_STYLE, WS_POPUP.0 as _);
             SetWindowPos(
                 hwnd,
                 None,
@@ -740,7 +741,7 @@ unsafe fn toggle_fullscreen(hwnd: HWND, app: &mut App) -> AppResult<()> {
                 SWP_FRAMECHANGED | SWP_NOZORDER,
             )?;
         } else {
-            SetWindowLongPtrW(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW.0 as isize);
+            SetWindowLongPtrW(hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW.0 as _);
             let r = app.placement;
             SetWindowPos(
                 hwnd,

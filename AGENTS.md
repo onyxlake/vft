@@ -17,7 +17,7 @@ The five protocol/FEC/visual/sender/receiver libraries are `no_std + alloc`. Kee
 
 Respect the workspace's declared Rust version and edition in `Cargo.toml`. A successful build on a newer compiler does not establish minimum-version compatibility. Avoid adding dependencies or platform requirements without a concrete need.
 
-Supported adapters target Windows 10/11 x64, Linux Wayland and browser sending. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [README limitations](README.md#limitations) before changing portability boundaries.
+Supported adapters target Windows 10/11 and Linux Wayland with 386/amd64 binaries, plus browser sending. The 386 download label uses Rust's i686 targets. Additional platforms, camera localization, feedback adaptation, disk-backed recovery, encryption, archives and other extensions are outside the current implementation scope unless requested. See [README limitations](README.md#limitations) before changing portability boundaries.
 
 Keep browser sender file reads and hashing bounded in its dedicated Worker, reuse the existing sender/visual cores, and preserve pause/stop/hidden-page handling and exact Canvas sizing. See [docs/wasm-sender.md](docs/wasm-sender.md) for its ABI and browser requirements.
 

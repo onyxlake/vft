@@ -10,12 +10,13 @@ resolve their working directory internally, so absolute script paths also work e
 
 ## Windows
 
-Native applications target Windows 10/11 x64. For `x86_64-pc-windows-msvc`, install Visual Studio
+Native applications target Windows 10/11. The `amd64` and `386` downloads use Rust's
+`x86_64-pc-windows-msvc` and `i686-pc-windows-msvc` targets respectively. Install Visual Studio
 or its Build Tools with the C++ desktop workload and a Windows SDK. These supply the linker and
 Windows import libraries; installing Rust alone is insufficient. See the official
 [Rust MSVC prerequisites](https://rust-lang.github.io/rustup/installation/windows-msvc.html).
 
-When copying a default MSVC release executable to another machine, provide the matching x64
+When copying a default MSVC release executable to another machine, provide the matching x86/x64
 [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
 Its runtime version must be at least as recent as the build tools used. Default MSVC builds
 use the dynamic CRT; static CRT requires an explicit build configuration.
@@ -31,6 +32,7 @@ directory containing a copied binary. See [PowerShell command resolution](https:
 | `python scripts/check.py` | Script regression tests, Rust fmt/check/clippy/test; stops at first failure | Windows, Linux |
 | `python scripts/build-web.py` | Self-contained `output/web-sender/index.html` with release WASM; `--debug` selects debug WASM | Windows, Linux |
 | `python scripts/check-web.py` | Single-file build, WASM lint, source/bundle JS syntax and embedded Worker/WASM/native SHA-verified recovery | Windows, Linux |
+| `python scripts/package-native.py --target TARGET` | Package explicitly targeted release binaries as versioned ZIPs and, on Linux, DEB/RPM files | Windows; Debian/Ubuntu for Linux packages |
 | `python scripts/wayland-e2e.py` | Interactive portal selection, local Wayland transfer and independent SHA-256 | Linux Wayland desktop |
 | `python scripts/local-e2e.py` | Local screen capture and independent output hash comparison | Windows desktop |
 | `python scripts/check-tui-cli.py` | Six redirected CLI/TUI probes | Windows desktop |
@@ -67,24 +69,51 @@ uploads are skipped. The web check still compiles the WASM bundle needed for its
 These are build and headless checks; they do not exercise desktop capture, portal selection,
 browser UI or real remote transfer.
 
-Master/tag pushes and manual runs also build the workspace in release mode, package the native
-and web outputs, and retain these downloadable Actions artifacts for 14 days:
+Master/tag pushes and manual runs also build four explicit native targets. The 386 build jobs
+run the workspace tests on their 32-bit targets before building release executables. Linux 386
+builds use Ubuntu's i386 PipeWire/SPA libraries, multilib GCC and matching pkg-config/bindgen
+settings. PRs skip this packaging matrix. Downloadable Actions artifacts are retained for 14 days:
 
 | Artifact | Contents |
 | --- | --- |
-| `vft-windows-x86_64` | `vft-windows-x86_64.zip`: `vft-send-win.exe`, `vft-recv-win.exe`, README, license and technical guides |
-| `vft-linux-x86_64` | `vft-linux-x86_64.tar.gz`: `vft-send-linux`, `vft-recv-linux`, README, license and technical guides; executable permissions preserved |
+| `vft-windows-386` | `vft-v<version>-windows-386.zip` |
+| `vft-windows-amd64` | `vft-v<version>-windows-amd64.zip` |
+| `vft-linux-386` | `vft-v<version>-linux-386.zip`, `.deb` and `.rpm` |
+| `vft-linux-amd64` | `vft-v<version>-linux-amd64.zip`, `.deb` and `.rpm` |
 | `vft-web` | `index.html`, raw `vft_send_web.wasm` and `web-THIRD-PARTY-NOTICES.txt` |
 
+Each ZIP contains only the sender and receiver executables at its root, with no README,
+license files or technical guides. Linux ZIPs preserve executable permissions. Linux packages
+install `vft-send-linux` and `vft-recv-linux` under `/usr/bin` and include the project license.
+Their metadata records linked-library dependencies plus the dynamically loaded Wayland/xkbcommon
+libraries and the ScreenCast portal. A compositor-specific portal backend still needs configuring.
+The `386` label means the Rust i686 target, not support for an original 80386 CPU.
+
+Tag builds use the tag in filenames, for example `vft-v0.1.0-linux-amd64.deb`. Untagged CI builds
+use the workspace version plus `-dev.<12-character-commit>`. DEB/RPM versions order prereleases
+before stable releases using `~`; build metadata stays in filenames but not package versions.
+To package a local build, first build the chosen target, then run:
+
+```sh
+cargo build --release --locked --target x86_64-unknown-linux-gnu -p vft-send-linux -p vft-recv-linux
+python scripts/package-native.py --target x86_64-unknown-linux-gnu --version v0.1.0
+```
+
+Linux packaging additionally needs `dpkg-dev` and `rpm` on Debian/Ubuntu, with the target's
+development libraries installed for dependency scanning. The packager checks ELF/PE machine
+headers before assigning architecture labels, honors Cargo's target directory and creates new
+files under `output/release/`. `--output-dir` selects another directory within `output/`.
+Existing packages are never overwritten; staging and diagnostics stay under `output/`.
+
 `index.html` is self-contained; open it directly in a browser. It already embeds WASM and
-license notices. The separate WASM file is
-for integrations using the [documented ABI](wasm-sender.md#adapter-and-abi); retain its companion
+license notices. The separate WASM file is for integrations using the
+[documented ABI](wasm-sender.md#adapter-and-abi); retain its companion
 notices when redistributing it. Native packages still need the documented Windows VC++ runtime
 or [Linux runtime dependencies](linux-wayland.md#build-and-runtime-requirements). Linux binaries
 are built on Ubuntu 24.04 and are not static or universally portable to older distributions.
 
 Master builds publish Actions artifacts only. Pushing a tag such as `v0.1.0` creates a GitHub
-Release **after both native jobs and the web job pass**, attaching the two native archives,
+Release **after native checks, all four native builds and the web job pass**, attaching the eight native packages,
 the three web files and `SHA256SUMS.txt`. Tags containing a hyphen (for example `v0.1.0-rc.1`)
 publish prereleases. Existing releases/assets are not overwritten; a rerun against an already
 published tag fails. Only the release job receives `contents: write`; PR jobs use read-only

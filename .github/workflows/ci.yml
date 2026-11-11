@@ -27,11 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-2022
-            artifact: vft-windows-x86_64
-          - os: ubuntu-24.04
-            artifact: vft-linux-x86_64
+        os: [windows-2022, ubuntu-24.04]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,52 +56,89 @@ jobs:
         run: python scripts/check.py
       - name: Check shared cores without default features
         run: cargo check --locked -p vft-protocol -p vft-fec -p vft-visual -p vft-sender -p vft-receiver --no-default-features
-      - name: Build release binaries
-        if: github.event_name != 'pull_request'
-        run: cargo build --release --workspace --locked
       - name: Check for generated source changes
         run: git diff --exit-code
-      - name: Package native sender and receiver
-        if: github.event_name != 'pull_request'
-        shell: python
+
+  native-build:
+    name: Build (${{ matrix.platform }}-${{ matrix.arch }})
+    if: github.event_name != 'pull_request'
+    needs: native
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows
+            arch: '386'
+            target: i686-pc-windows-msvc
+            adapter: win
+          - os: windows-2022
+            platform: windows
+            arch: amd64
+            target: x86_64-pc-windows-msvc
+            adapter: win
+          - os: ubuntu-24.04
+            platform: linux
+            arch: '386'
+            target: i686-unknown-linux-gnu
+            adapter: linux
+          - os: ubuntu-24.04
+            platform: linux
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+            adapter: linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install Linux build and packaging dependencies
+        if: runner.os == 'Linux'
+        env:
+          VFT_ARCH: ${{ matrix.arch }}
+        shell: bash
         run: |
-          import sys
-          import tarfile
-          import zipfile
-
-          sys.path.insert(0, 'scripts')
-          from vft_dev import ROOT, target_directory
-
-          windows = sys.platform == 'win32'
-          platform = 'windows' if windows else 'linux'
-          suffix = '-win.exe' if windows else '-linux'
-          binaries = target_directory() / 'release'
-          files = [(binaries / f'vft-{kind}{suffix}', f'vft-{kind}{suffix}')
-                   for kind in ('send', 'recv')]
-          files += [(ROOT / name, name) for name in ('README.md', 'LICENSE')]
-          files += [(path, path.relative_to(ROOT).as_posix())
-                    for path in sorted((ROOT / 'docs').glob('*.md'))]
-          for path, _ in files:
-              if not path.is_file():
-                  raise FileNotFoundError(path)
-
-          destination = ROOT / 'output' / 'release'
-          destination.mkdir(parents=True, exist_ok=True)
-          name = f'vft-{platform}-x86_64'
-          if windows:
-              with zipfile.ZipFile(destination / f'{name}.zip', 'x', zipfile.ZIP_DEFLATED) as archive:
-                  for path, member in files:
-                      archive.write(path, member)
-          else:
-              with (destination / f'{name}.tar.gz').open('xb') as output:
-                  with tarfile.open(fileobj=output, mode='w:gz') as archive:
-                      for path, member in files:
-                          archive.add(path, arcname=member)
+          packages=(build-essential pkg-config libclang-dev dpkg-dev rpm file)
+          if [[ "$VFT_ARCH" == 386 ]]; then
+            sudo dpkg --add-architecture i386
+            packages+=(gcc-multilib g++-multilib libpipewire-0.3-dev:i386 libspa-0.2-dev:i386)
+            multiarch=i386-linux-gnu
+            printf '%s\n' 'BINDGEN_EXTRA_CLANG_ARGS=--target=i686-unknown-linux-gnu -I/usr/include/i386-linux-gnu' 'CARGO_TARGET_I686_UNKNOWN_LINUX_GNU_LINKER=gcc' >> "$GITHUB_ENV"
+          else
+            packages+=(libpipewire-0.3-dev:amd64 libspa-0.2-dev:amd64)
+            multiarch=x86_64-linux-gnu
+          fi
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y "${packages[@]}"
+          printf 'PKG_CONFIG_ALLOW_CROSS=1\nPKG_CONFIG_LIBDIR=/usr/lib/%s/pkgconfig:/usr/share/pkgconfig\n' "$multiarch" >> "$GITHUB_ENV"
+      - name: Install the repository Rust toolchain
+        run: rustup show active-toolchain
+      - name: Install the build target
+        run: rustup target add ${{ matrix.target }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: build-${{ matrix.target }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+      - name: Test 32-bit unit and headless recovery paths
+        if: matrix.arch == '386'
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
+      - name: Build native sender and receiver
+        run: cargo build --release --locked --target ${{ matrix.target }} -p vft-send-${{ matrix.adapter }} -p vft-recv-${{ matrix.adapter }}
+      - name: Package native sender and receiver
+        run: python scripts/package-native.py --target ${{ matrix.target }}
+      - name: Check for generated source changes
+        run: git diff --exit-code
       - name: Upload native build
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ matrix.artifact }}
+          name: vft-${{ matrix.platform }}-${{ matrix.arch }}
           path: output/release/*
           if-no-files-found: error
           retention-days: 14
@@ -178,7 +211,7 @@ jobs:
   release:
     name: Publish tagged release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [native, web]
+    needs: [native-build, web]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -199,7 +232,17 @@ jobs:
         shell: bash
         run: |
           set -o noclobber
-          assets=(vft-windows-x86_64.zip vft-linux-x86_64.tar.gz vft_send_web.wasm index.html web-THIRD-PARTY-NOTICES.txt)
+          assets=(
+            "vft-${RELEASE_TAG}-windows-386.zip"
+            "vft-${RELEASE_TAG}-windows-amd64.zip"
+            "vft-${RELEASE_TAG}-linux-386.zip"
+            "vft-${RELEASE_TAG}-linux-386.deb"
+            "vft-${RELEASE_TAG}-linux-386.rpm"
+            "vft-${RELEASE_TAG}-linux-amd64.zip"
+            "vft-${RELEASE_TAG}-linux-amd64.deb"
+            "vft-${RELEASE_TAG}-linux-amd64.rpm"
+            vft_send_web.wasm index.html web-THIRD-PARTY-NOTICES.txt
+          )
           sha256sum "${assets[@]}" > SHA256SUMS.txt
           options=(--verify-tag --generate-notes --title "$RELEASE_TAG")
           if [[ "$RELEASE_TAG" == *-* ]]; then

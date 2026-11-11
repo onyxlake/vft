@@ -7,6 +7,9 @@ sender/receiver sessions. They run on Wayland; X11 is not implemented.
 
 Rust 1.99.1 or newer, a C compiler, pkg-config, libclang (for PipeWire bindgen),
 PipeWire/SPA development headers and libraries are needed to build the Linux receiver.
+Release packages use `amd64` (`x86_64-unknown-linux-gnu`) and `386` (`i686-unknown-linux-gnu`)
+targets. ZIPs contain only both binaries; DEB/RPM packages install them under `/usr/bin`.
+See [release packaging](development.md#github-ci-and-releases) for dependencies and naming.
 The sender dynamically loads Wayland and xkbcommon; it uses winit 0.30.13 and
 softbuffer 0.4.8 with only the Wayland backend enabled. The receiver uses ashpd 0.14.0
 (Tokio and ScreenCast features) and pipewire-rs 0.10.1. Linux desktop dependencies are

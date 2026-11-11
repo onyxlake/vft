@@ -5,7 +5,7 @@ captures the frames, recovers missing data with deterministic FEC, and saves the
 SHA-256 verification. The transfer requires no network connection between endpoints, shared
 filesystem, acknowledgements or capture-order continuity.
 
-Native sender/receiver applications are available for Windows 10/11 x64 and Linux Wayland.
+Native sender/receiver applications target Windows 10/11 and Linux Wayland, with 386/amd64 builds.
 A browser sender runs from a self-contained HTML file. The five shared Rust cores use
 `no_std + alloc`; the current wire format is VFT v0.
 
@@ -15,7 +15,7 @@ A browser sender runs from a self-contained HTML file. The five shared Rust core
 - Python **3.9+** for development scripts; no Python packages are required. Use `python3` on
   Linux when `python` is unavailable. Node.js **22+** is needed only for browser development tests.
 - Windows MSVC builds need the C++ build tools and Windows SDK. Copied MSVC executables normally
-  need the matching x64 Visual C++ runtime. See [Windows setup](docs/development.md#windows).
+  need the Visual C++ runtime matching the executable's x86/x64 architecture. See [Windows setup](docs/development.md#windows).
 - Linux workspace builds need PipeWire/SPA development libraries, pkg-config, a C compiler and
   libclang. Runtime capture needs Wayland, PipeWire and a ScreenCast portal backend. See
   [Linux requirements](docs/linux-wayland.md#build-and-runtime-requirements).
