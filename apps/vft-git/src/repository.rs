@@ -1,6 +1,8 @@
 use crate::{
-    format::copy_hash, process::Git, temporary::unique_id, Control, Header, ObjectFormat, Result,
-    TempDir, HEADER_LEN,
+    format::copy_hash,
+    process::{path_arg, Git},
+    temporary::unique_id,
+    Control, Header, ObjectFormat, Result, TempDir, HEADER_LEN,
 };
 use std::{
     fs::{self, File, OpenOptions},
@@ -406,7 +408,7 @@ pub fn prepare(
                 std::ffi::OsStr::new("bundle"),
                 "create".as_ref(),
                 "--version=3".as_ref(),
-                bundle.as_os_str(),
+                path_arg(&bundle).as_os_str(),
                 pinned.name.as_ref(),
                 format!("^{base}").as_ref(),
             ],
@@ -568,7 +570,11 @@ impl ReceiveSession {
         self.repo
             .git
             .raw(
-                ["bundle".as_ref(), "verify".as_ref(), bundle.as_os_str()],
+                [
+                    "bundle".as_ref(),
+                    "verify".as_ref(),
+                    path_arg(&bundle).as_os_str(),
+                ],
                 control,
             )?
             .require()?;
@@ -576,7 +582,11 @@ impl ReceiveSession {
             .repo
             .git
             .raw(
-                ["bundle".as_ref(), "list-heads".as_ref(), bundle.as_os_str()],
+                [
+                    "bundle".as_ref(),
+                    "list-heads".as_ref(),
+                    path_arg(&bundle).as_os_str(),
+                ],
                 control,
             )?
             .require()?;
@@ -590,7 +600,11 @@ impl ReceiveSession {
         self.repo
             .git
             .raw(
-                ["bundle".as_ref(), "unbundle".as_ref(), bundle.as_os_str()],
+                [
+                    "bundle".as_ref(),
+                    "unbundle".as_ref(),
+                    path_arg(&bundle).as_os_str(),
+                ],
                 control,
             )?
             .require()?;

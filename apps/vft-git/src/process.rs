@@ -13,6 +13,33 @@ use std::{
 };
 const OUTPUT_LIMIT: u64 = 8 * 1024 * 1024;
 const ERROR_LIMIT: u64 = 64 * 1024;
+
+/// Keep canonical paths for Rust filesystem operations, but pass ordinary drive/UNC
+/// paths to Git: its lockfile code rejects Windows verbatim prefixes after slash conversion.
+pub(crate) fn path_arg(path: &Path) -> OsString {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+        let mut components = path.components();
+        if let Some(Component::Prefix(prefix)) = components.next() {
+            let mut argument = match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => OsString::from(format!("{}:", char::from(drive))),
+                Prefix::VerbatimUNC(server, share) => {
+                    let mut argument = OsString::from(r"\\");
+                    argument.push(server);
+                    argument.push(r"\");
+                    argument.push(share);
+                    argument
+                }
+                _ => return path.as_os_str().to_owned(),
+            };
+            argument.push(components.as_path());
+            return argument;
+        }
+    }
+    path.as_os_str().to_owned()
+}
+
 #[derive(Clone, Debug)]
 pub struct Control {
     pub cancel: Arc<AtomicBool>,
@@ -217,7 +244,7 @@ impl Git {
                 .env(format!("GIT_CONFIG_VALUE_{index}"), value);
         }
         let mut hooks = OsString::from("core.hooksPath=");
-        hooks.push(self.scratch.path().join("hooks"));
+        hooks.push(path_arg(&self.scratch.path().join("hooks")));
         command
             .arg("-c")
             .arg(hooks)
@@ -348,5 +375,50 @@ impl Drop for ManagedChild {
             }
         }
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_path_arguments_handle_verbatim_drive_and_unc_paths() {
+        for (input, expected) in [
+            (r"\\?\C:\", r"C:\"),
+            (
+                r"\\?\C:\work space\文件\update.bundle",
+                r"C:\work space\文件\update.bundle",
+            ),
+            (r"\\?\UNC\server\share", r"\\server\share"),
+            (r"\\?\UNC\server\share\", r"\\server\share\"),
+            (
+                r"\\?\UNC\server\share\work space\update.bundle",
+                r"\\server\share\work space\update.bundle",
+            ),
+            (
+                r"C:\work space\update.bundle",
+                r"C:\work space\update.bundle",
+            ),
+            (
+                r"\\server\share\update.bundle",
+                r"\\server\share\update.bundle",
+            ),
+            (r"relative\update.bundle", r"relative\update.bundle"),
+        ] {
+            assert_eq!(path_arg(Path::new(input)), OsStr::new(expected), "{input}");
+        }
+    }
+
+    #[test]
+    fn git_path_arguments_preserve_non_unicode_names() {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let mut input: Vec<_> = r"\\?\C:\work\".encode_utf16().collect();
+        input.push(0xd800);
+        let path = PathBuf::from(OsString::from_wide(&input));
+        assert_eq!(
+            path_arg(&path).encode_wide().collect::<Vec<_>>(),
+            input[4..]
+        );
     }
 }
