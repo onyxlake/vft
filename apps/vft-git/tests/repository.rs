@@ -150,7 +150,19 @@ fn repository_discovery_subdirectory_nonrepo_and_cancellation() {
         .apply(&package, DEFAULT_MAX_PACKAGE, &control, |_| {})
         .is_err());
     assert_eq!(git(&receiver, &["rev-parse", "HEAD"]), base);
-    assert!(ReceiveSession::open(&root, None, &Control::default()).is_err());
+    // Fixtures live inside the VFT checkout, so an ordinary directory here discovers
+    // that parent repository. A gitfile pointing to an absent directory stops discovery
+    // locally, without depending on the parent worktree's status or permissions.
+    let non_repository = root.join("non-repository");
+    fs::create_dir(&non_repository).unwrap();
+    fs::write(non_repository.join(".git"), b"gitdir: missing.git\n").unwrap();
+    let error =
+        ReceiveSession::open(&non_repository, None, &Control::default()).unwrap_err_string();
+    assert!(
+        error.contains("not a git repository")
+            || error.contains("gitfile does not point to a valid repository"),
+        "{error}"
+    );
     let no_dir = root.join("not-directory");
     fs::write(&no_dir, b"file").unwrap();
     assert!(vft_git::TempDir::in_directory(&no_dir, "vft-git").is_err());

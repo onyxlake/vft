@@ -88,7 +88,20 @@ def check():
     command(root, sender, "--git", "--git-repo", source, "--git-base", base,
             "--git-package", package, "--git-prepare-only", "--no-tui", success=False)
     require(sha256(package) == package_hash, "existing package was modified")
-    command(root, sender, "--git", "--git-base", base, "--git-prepare-only", "--no-tui", success=False)
+    # Evidence is kept under the VFT checkout. Stop discovery here instead of testing
+    # that parent repository and accidentally passing for an unrelated baseline error.
+    non_repository = root / "non-repository"
+    non_repository.mkdir()
+    with (non_repository / ".git").open("x", encoding="utf-8") as stream:
+        stream.write("gitdir: missing.git\n")
+    rejected = command(non_repository, sender, "--git", "--git-base", base,
+                       "--git-prepare-only", "--no-tui", success=False)
+    require("not a git repository" in rejected or "gitfile does not point to a valid repository" in rejected,
+            "sender did not reject the non-repository fixture")
+    rejected = command(non_repository, receiver, "--git", "--git-apply", package,
+                       "--no-tui", success=False)
+    require("not a git repository" in rejected or "gitfile does not point to a valid repository" in rejected,
+            "receiver did not reject the non-repository fixture")
     command(source, sender, "--git", "--git-prepare-only", "--no-tui", success=False)
     output = command(root, sender, "--git-repo", source, "--git", "--git-base", base,
                      "--git-prepare-only", "--no-tui")
