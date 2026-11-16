@@ -31,7 +31,7 @@ use windows::{
 };
 const WM_CONTROL: u32 = WM_APP + 1;
 
-type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
+type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 struct WindowGuard(HWND);
 impl Drop for WindowGuard {
     fn drop(&mut self) {
@@ -53,6 +53,7 @@ impl ObjectSource for FileSource {
     }
 }
 struct Options {
+    git: vft_git::cli::SenderOptions,
     tui: Option<bool>,
     file: Option<PathBuf>,
     profile: ProfileId,
@@ -66,11 +67,17 @@ struct Options {
 }
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    parse_options(&args)
+}
+fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         println!("vft-send FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--rect-file reserves a new file; existing files are never overwritten.\nESC exits; SPACE pauses; F11 toggles fullscreen.");
+        println!("{}", vft_git::cli::SEND_HELP);
         return Ok(None);
     }
+    let (git, args) = vft_git::cli::SenderOptions::extract(args)?;
     let mut out = Options {
+        git,
         tui: None,
         file: None,
         profile: ProfileId::Balanced,
@@ -124,7 +131,8 @@ fn options() -> AppResult<Option<Options>> {
     if !(1..=60).contains(&out.fps) || !(2..=32).contains(&out.cell_size) || out.frames == Some(0) {
         return Err("invalid FPS, cell size or frame count".into());
     }
-    if out.file.is_none() && !pattern {
+    out.git.validate_source(out.file.is_some(), pattern)?;
+    if out.file.is_none() && !pattern && out.git.repo.is_none() {
         return Err("supply a file or --test-pattern".into());
     }
     if out.file.is_some() && pattern {
@@ -173,7 +181,17 @@ impl App {
         let grid = GridConfig::for_profile(options.profile);
         let mut filename = String::from("test pattern");
         let sender = if let Some(path) = &options.file {
-            let mut file = File::open(path).map_err(|e| {
+            let opened = if options.git.repo.is_some() {
+                use std::os::windows::fs::OpenOptionsExt;
+                // While transmitting a generated Git package, allow readers only.
+                std::fs::OpenOptions::new()
+                    .read(true)
+                    .share_mode(1)
+                    .open(path)
+            } else {
+                File::open(path)
+            };
+            let mut file = opened.map_err(|e| {
                 format!(
                     "Cannot open input file {}: {e}",
                     vft_tui::safe_text(&path.display().to_string())
@@ -416,6 +434,13 @@ pub fn run() -> AppResult<()> {
         std::io::stdout().is_terminal(),
     )?;
     options.tui = Some(tui);
+    if options.git.repo.is_some() {
+        let Some(path) = crate::git::prepare(&options.git, tui)? else {
+            return Ok(());
+        };
+        options.file = Some(path);
+    }
+
     let app = Box::new(RefCell::new(App::new(options)?));
     let (width, height, position, fullscreen, fps) = {
         let app = app.borrow();
@@ -755,5 +780,27 @@ unsafe fn toggle_fullscreen(hwnd: HWND, app: &mut App) -> AppResult<()> {
         }
         app.fullscreen = !app.fullscreen;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod git_option_tests {
+    use super::*;
+    #[test]
+    fn git_sender_requires_baseline_and_conflicts_with_file() {
+        let parse =
+            |args: &[&str]| parse_options(&args.iter().map(|v| (*v).into()).collect::<Vec<_>>());
+        let options = parse(&["--git", "--git-base", "abc", "--git-prepare-only"])
+            .unwrap()
+            .unwrap();
+        assert!(options.git.prepare_only);
+        assert_eq!(options.git.repo.as_deref(), Some(std::path::Path::new(".")));
+        for args in [
+            vec!["--git"],
+            vec!["file", "--git", "--git-base", "abc"],
+            vec!["--git-base", "abc"],
+        ] {
+            assert!(parse(&args).is_err());
+        }
     }
 }

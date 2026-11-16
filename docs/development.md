@@ -4,7 +4,7 @@ The repository's development entry points use Python 3.9+ and its standard libra
 No pip packages or PowerShell installation are required. Rust 1.99.1 is the minimum supported
 version and the pinned toolchain in `rust-toolchain.toml`; the workspace uses edition 2021.
 `Cargo.toml` declares dependencies and `Cargo.lock` pins their resolved versions. Rustup installs
-rustfmt, Clippy and `wasm32-unknown-unknown` with it. Browser checks also need Node.js 22+. On Linux, substitute `python3`
+rustfmt, Clippy and `wasm32-unknown-unknown` with it. Git integration tests require Git 2.48+ on PATH. Browser checks also need Node.js 22+. On Linux, substitute `python3`
 for `python` when necessary. Script paths below are relative to the repository root; scripts
 resolve their working directory internally, so absolute script paths also work elsewhere.
 
@@ -31,6 +31,7 @@ directory containing a copied binary. See [PowerShell command resolution](https:
 | --- | --- | --- |
 | `python scripts/check.py` | Script regression tests, Rust fmt/check/clippy/test; stops at first failure | Windows, Linux |
 | `python scripts/build-web.py` | Self-contained `output/web-sender/index.html` with release WASM; `--debug` selects debug WASM | Windows, Linux |
+| `python scripts/check-git.py` | Offline native Git CLI preparation/application/retry; creates isolated repositories and retained evidence, no desktop | Windows, Linux |
 | `python scripts/check-web.py` | Single-file build, WASM lint, source/bundle JS syntax and embedded Worker/WASM/native SHA-verified recovery | Windows, Linux |
 | `python scripts/package-native.py --target TARGET` | Package explicitly targeted release binaries as versioned ZIPs and, on Linux, DEB/RPM files | Windows; Debian/Ubuntu for Linux packages |
 | `python scripts/wayland-e2e.py` | Interactive portal selection, local Wayland transfer and independent SHA-256 | Linux Wayland desktop |
@@ -184,3 +185,23 @@ source hash; omitting it still checks the manifest SHA but provides no separate 
 Generated CSVs, configuration, logs and previews stay under ignored `output/`.
 Verified goodput is original bytes divided by receiver elapsed time and is zero on failure.
 Requested FPS, duplicate captures and decode rejections do not measure video frame loss.
+
+## Git synchronization checks
+
+`cargo test -p vft-git` covers independently constructed application-header bytes, malformed
+packages, real isolated SHA-1/SHA-256 repositories, dirty/collision/baseline guards, subprocess
+cancellation and a repair-only visual round trip. The latter renders/samples robust and balanced
+frames with loss, duplication, corruption and reordering, saves verified chunks, independently
+compares SHA-256 using Python, applies the package and compares Git HEAD/tree plus binary hashes.
+The test repositories explicitly disable automatic CRLF conversion and mark binary data as such;
+the result does not assert raw worktree-byte equality under arbitrary Git configurations.
+
+`python scripts/check-git.py` builds the release native apps and checks preparation-only, root/subdir
+repository discovery, explicit-path priority, retained automatic package paths, output collisions,
+invalid temporary locations, dirty-apply failure, offline retry, repeat application and empty deltas.
+On Unix it also sends real SIGINT during CLI preparation and at the update boundary.
+Use `--skip-build` only with current release binaries. Commands and reports are created under
+ignored `output/git-cli-*`; tests do not open a desktop, portal or network session. Git runtime
+coverage is documented in [Git synchronization requirements](git-sync.md#requirements-and-baseline).
+Native compilation, these headless tests, local desktop capture and real remote acceptance remain
+separate forms of evidence.

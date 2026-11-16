@@ -11,6 +11,7 @@
 | `crates/vft-receiver` | Session discovery, symbol collection, recovery and hash verification |
 | `crates/vft-testkit` | Seeded distortion simulation and headless integration tooling |
 | `apps/vft-send` / `apps/vft-recv` | Native entry points with target-selected Windows or Linux adapters |
+| `apps/vft-git` | std-only Git package, controlled subprocesses, repository guards and fast-forward application |
 | `apps/vft-linux` | Shared Linux file, pixel and recovery adapters |
 | `apps/vft-send-web` | Bounded Worker File API source, WASM core and Canvas presentation |
 | `apps/vft-tui` | Shared native terminal models, controls and rendering |
@@ -23,7 +24,7 @@ Screen capture → visual sampling → CRC-validated packets → receiver/FEC �
 `vft-protocol`, `vft-fec`, `vft-visual`, `vft-sender`, and `vft-receiver` are `no_std + alloc`.
 They use no filesystem, Windows, UI or capture APIs. `vft-testkit` uses std for test tooling.
 The only external shared dependency is SHA-256 (`sha2` with default features disabled).
-Windows APIs are target-specific dependencies of the two applications.
+Windows APIs remain target-specific dependencies of native applications and their std adapter libraries.
 Each application has one binary name across platforms: `vft-send` or `vft-recv`, with `.exe`
 on Windows. Compile-time target selection includes `win` for Win32/GDI or `wayland` for
 Wayland presentation and ScreenCast/PipeWire capture; desktop dependencies remain target-specific.
@@ -44,7 +45,9 @@ Progress replaces a latest snapshot, with 5 Hz rendering, six-row incomplete-gro
 codes with OS-random IDs. No pixels or recovered file copies cross into the terminal.
 
 The Windows receiver notifies the UI immediately before hashing. Native Complete is published only
-after SHA verification and create-new output succeed. TUI results remain visible until Quit,
+after SHA verification and create-new output succeed. Git mode additionally requires successful
+repository application and final branch/tree/worktree checks. Packing, verification and application
+have separate terminal states; stopping during the branch update waits for Git to finish. TUI results remain visible until Quit,
 while CLI completion still exits. RAII restores raw mode, alternate screen, cursor and bracketed
 paste after normal exits, errors and unwind; workers are stopped and joined before final summaries.
 Forced process termination cannot restore a terminal. The independent visual window remains the
@@ -119,3 +122,26 @@ source reads stay random-access, and output/preview/stats use create-new semanti
 [Linux Wayland](linux-wayland.md) for coordinates, system dependencies and capture constraints.
 
 The [build and test guide](development.md) covers workspace checks and platform-specific harnesses.
+
+## Offline Git application layer
+
+`apps/vft-git` is a std application library shared by both native platforms. It generates a
+[versioned application header](git-package-format.md) and a native Git bundle, keeps the completed
+package, and hands its path to the existing random-access sender. `--git-prepare-only` returns
+before any visual window starts; the same file can be selected in the existing browser sender.
+The five cores and VFT v0 semantics are unchanged.
+
+On receiving, the adapter first saves synchronized verified chunks with create-new semantics,
+then asks a startup `ReceiveSession` to validate and apply the package. That session owns an OS
+lock in the repository's Git common directory and records the checked-out branch and full HEAD.
+It rechecks these and the clean index/worktree before object import and fast-forward application.
+Bundle reference names cannot select local branches. Imported objects are validated and pinned;
+the old commit receives a retained backup ref before `merge --ff-only --no-overwrite-ignore`.
+Final HEAD, index tree and clean-worktree checks precede overall completion. Failed application
+retains the received package and gives a capture-free `--git-apply` retry command.
+
+Git output/time are limited; hooks, automatic maintenance, filters and lazy fetching are handled
+as described in [Git execution constraints](git-sync.md#unsupported-repositories-and-controlled-execution).
+Files/OS processes remain outside the no_std cores. The task lock excludes other VFT operations;
+users must also avoid independent edits/Git activity. No whole-worktree atomic rollback is claimed.
+Transport statistics retain their original file-transfer meaning, excluding Git application time.
