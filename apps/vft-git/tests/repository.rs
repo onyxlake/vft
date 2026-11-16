@@ -6,6 +6,26 @@ fn apply(session: &ReceiveSession, path: &Path) -> vft_git::Result<vft_git::Appl
     session.apply(path, DEFAULT_MAX_PACKAGE, &Control::default(), |_| {})
 }
 #[test]
+fn fixture_checkout_stays_clean_with_global_autocrlf() {
+    for format in ["sha1", "sha256"] {
+        let (_, _, receiver, base) =
+            fixture_format_with_global_config(format, Some("[core]\n\tautocrlf = true\n"));
+        assert_eq!(
+            git(&receiver, &["config", "--local", "--get", "core.autocrlf"]),
+            "false"
+        );
+        for (name, contents) in [
+            ("text.txt", "baseline\n"),
+            ("remove.txt", "delete me\n"),
+            ("rename.txt", "rename me\n"),
+        ] {
+            assert_eq!(fs::read(receiver.join(name)).unwrap(), contents.as_bytes());
+        }
+        let session = ReceiveSession::open(&receiver, None, &Control::default()).unwrap();
+        assert_eq!(session.head, base);
+    }
+}
+#[test]
 fn normal_delta_merge_history_and_safe_repeat() {
     for format in ["sha1", "sha256"] {
         let (root, source, receiver, base) = fixture_format(format);

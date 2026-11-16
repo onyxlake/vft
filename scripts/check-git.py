@@ -52,8 +52,11 @@ def check():
     git(source, "commit", "-qm", "base")
     base = git(source, "rev-parse", "HEAD")
     destination = root / "receiver"
-    git(root, "clone", "--no-hardlinks", source, destination)
+    # Clone performs the first checkout, before the receiver's later config calls.
+    git(root, "clone", "--no-hardlinks", "--config", "core.autocrlf=false", source, destination)
     git(destination, "config", "core.autocrlf", "false")
+    require(not git(destination, "status", "--porcelain=v1", "--untracked-files=no"),
+            "receiver fixture must start with a clean index/worktree")
     (source / "text.txt").write_bytes(b"target\n")
     (source / ".gitattributes").write_bytes(b"data.bin -text\n")
     write_fixture(source / "data.bin", 65536)
