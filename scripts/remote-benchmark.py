@@ -29,7 +29,7 @@ def check():
         parser.error("--expected-sha256 must contain 64 hexadecimal digits")
     require_windows()
     from vft_windows import ProcessMetrics
-    receiver_exe = executable(target_directory(), "vft-recv-win")
+    receiver_exe = executable(target_directory(), "vft-recv")
     if not receiver_exe.is_file():
         raise RuntimeError("Build release binaries first: cargo build --release --workspace")
     directory = evidence_directory("remote")

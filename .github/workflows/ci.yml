@@ -73,22 +73,18 @@ jobs:
             platform: windows
             arch: '386'
             target: i686-pc-windows-msvc
-            adapter: win
           - os: windows-2022
             platform: windows
             arch: amd64
             target: x86_64-pc-windows-msvc
-            adapter: win
           - os: ubuntu-24.04
             platform: linux
             arch: '386'
             target: i686-unknown-linux-gnu
-            adapter: linux
           - os: ubuntu-24.04
             platform: linux
             arch: amd64
             target: x86_64-unknown-linux-gnu
-            adapter: linux
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -130,7 +126,7 @@ jobs:
         if: matrix.arch == '386'
         run: cargo test --workspace --locked --target ${{ matrix.target }}
       - name: Build native sender and receiver
-        run: cargo build --release --locked --target ${{ matrix.target }} -p vft-send-${{ matrix.adapter }} -p vft-recv-${{ matrix.adapter }}
+        run: cargo build --release --locked --target ${{ matrix.target }} -p vft-send -p vft-recv
       - name: Package native sender and receiver
         run: python scripts/package-native.py --target ${{ matrix.target }}
       - name: Check for generated source changes

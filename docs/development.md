@@ -22,7 +22,7 @@ Its runtime version must be at least as recent as the build tools used. Default 
 use the dynamic CRT; static CRT requires an explicit build configuration.
 
 PowerShell commands must include the executable path unless it is on PATH: use
-`.\target\release\vft-send-win.exe` from the repository root, or `.\vft-send-win.exe` from a
+`.\target\release\vft-send.exe` from the repository root, or `.\vft-send.exe` from a
 directory containing a copied binary. See [PowerShell command resolution](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_command_precedence).
 
 ## Commands
@@ -83,8 +83,9 @@ settings. PRs skip this packaging matrix. Downloadable Actions artifacts are ret
 | `vft-web` | `index.html`, raw `vft_send_web.wasm` and `web-THIRD-PARTY-NOTICES.txt` |
 
 Each ZIP contains only the sender and receiver executables at its root, with no README,
-license files or technical guides. Linux ZIPs preserve executable permissions. Linux packages
-install `vft-send-linux` and `vft-recv-linux` under `/usr/bin` and include the project license.
+license files or technical guides: `vft-send.exe` / `vft-recv.exe` on Windows and
+`vft-send` / `vft-recv` on Linux. Linux ZIPs preserve executable permissions. Linux packages
+install `vft-send` and `vft-recv` under `/usr/bin` and include the project license.
 Their metadata records linked-library dependencies plus the dynamically loaded Wayland/xkbcommon
 libraries and the ScreenCast portal. A compositor-specific portal backend still needs configuring.
 The `386` label means the Rust i686 target, not support for an original 80386 CPU.
@@ -95,7 +96,7 @@ before stable releases using `~`; build metadata stays in filenames but not pack
 To package a local build, first build the chosen target, then run:
 
 ```sh
-cargo build --release --locked --target x86_64-unknown-linux-gnu -p vft-send-linux -p vft-recv-linux
+cargo build --release --locked --target x86_64-unknown-linux-gnu -p vft-send -p vft-recv
 python scripts/package-native.py --target x86_64-unknown-linux-gnu --version v0.1.0
 ```
 

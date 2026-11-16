@@ -32,14 +32,14 @@ def check():
     target = target_directory()
     directory = evidence_directory("tui-cli")
     pattern = ["--test-pattern", "--cell-size", "2", "--fps", "60", "--frames", "2"]
-    probe(directory, target, "sender-default-redirected", "vft-send-win", pattern, 0)
-    probe(directory, target, "sender-no-tui", "vft-send-win", [*pattern, "--no-tui"], 0)
+    probe(directory, target, "sender-default-redirected", "vft-send", pattern, 0)
+    probe(directory, target, "sender-no-tui", "vft-send", [*pattern, "--no-tui"], 0)
     interactive = "TUI requires interactive stdin and stdout"
-    probe(directory, target, "sender-explicit-tui-redirected", "vft-send-win", ["--test-pattern", "--tui"], 1, interactive)
-    probe(directory, target, "sender-conflicting-modes", "vft-send-win", ["--test-pattern", "--tui", "--no-tui"], 1, "mutually exclusive")
+    probe(directory, target, "sender-explicit-tui-redirected", "vft-send", ["--test-pattern", "--tui"], 1, interactive)
+    probe(directory, target, "sender-conflicting-modes", "vft-send", ["--test-pattern", "--tui", "--no-tui"], 1, "mutually exclusive")
     output = ["--auto", "--output", str(directory / "unused.bin")]
-    probe(directory, target, "receiver-explicit-tui-redirected", "vft-recv-win", [*output, "--tui"], 1, interactive)
-    probe(directory, target, "receiver-conflicting-modes", "vft-recv-win", [*output, "--tui", "--no-tui"], 1, "mutually exclusive")
+    probe(directory, target, "receiver-explicit-tui-redirected", "vft-recv", [*output, "--tui"], 1, interactive)
+    probe(directory, target, "receiver-conflicting-modes", "vft-recv", [*output, "--tui", "--no-tui"], 1, "mutually exclusive")
 
 
 if __name__ == "__main__":

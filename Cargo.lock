@@ -2378,7 +2378,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "vft-recv-linux"
+name = "vft-recv"
 version = "0.1.0"
 dependencies = [
  "ashpd",
@@ -2389,21 +2389,11 @@ dependencies = [
  "vft-receiver",
  "vft-tui",
  "vft-visual",
-]
-
-[[package]]
-name = "vft-recv-win"
-version = "0.1.0"
-dependencies = [
- "vft-protocol",
- "vft-receiver",
- "vft-tui",
- "vft-visual",
  "windows",
 ]
 
 [[package]]
-name = "vft-send-linux"
+name = "vft-send"
 version = "0.1.0"
 dependencies = [
  "softbuffer",
@@ -2412,6 +2402,7 @@ dependencies = [
  "vft-sender",
  "vft-tui",
  "vft-visual",
+ "windows",
  "winit",
 ]
 
@@ -2423,17 +2414,6 @@ dependencies = [
  "vft-receiver",
  "vft-sender",
  "vft-visual",
-]
-
-[[package]]
-name = "vft-send-win"
-version = "0.1.0"
-dependencies = [
- "vft-protocol",
- "vft-sender",
- "vft-tui",
- "vft-visual",
- "windows",
 ]
 
 [[package]]

@@ -30,7 +30,7 @@ def transfer(args, directory, target, size):
     write_fixture(source, size)
     with ExitStack() as stack:
         sender = stack.enter_context(LoggedProcess([
-            executable(target, "vft-send-linux"), source, "--no-tui", "--profile", args.profile,
+            executable(target, "vft-send"), source, "--no-tui", "--profile", args.profile,
             "--fps", args.fps, "--cell-size", args.cell_size,
         ], directory, f"{size}-sender"))
         time.sleep(args.join_delay_seconds)
@@ -38,7 +38,7 @@ def transfer(args, directory, target, size):
             raise RuntimeError(f"Sender exited; diagnostics: {directory}")
         print("In the portal, select the VFT sender window or its monitor. Keep the frame visible.", flush=True)
         receiver = stack.enter_context(LoggedProcess([
-            executable(target, "vft-recv-linux"), "--auto", "--no-tui", *output_options,
+            executable(target, "vft-recv"), "--auto", "--no-tui", *output_options,
             "--fps", "60", "--timeout", args.timeout_seconds, "--stats", stats,
             "--preview", directory / f"{size}-preview.bmp",
         ], directory, f"{size}-receiver", cwd=receiver_cwd))
@@ -86,7 +86,7 @@ def check():
         parser.error("--fps must be 1..60 and --cell-size 2..32")
     require_wayland()
     if not args.skip_build:
-        run("cargo", "build", "--release", "-p", "vft-send-linux", "-p", "vft-recv-linux")
+        run("cargo", "build", "--release", "-p", "vft-send", "-p", "vft-recv")
     target = target_directory()
     directory = evidence_directory("local-wayland")
     rows = []

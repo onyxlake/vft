@@ -1,19 +1,26 @@
 [package]
-name = "vft-recv-linux"
+name = "vft-recv"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
-vft-linux = { path = "../vft-linux" }
-vft-tui = { path = "../vft-tui" }
+[lints]
+workspace = true
+
+[dependencies]
 vft-protocol.workspace = true
 vft-receiver.workspace = true
 vft-visual.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+vft-tui = { path = "../vft-tui" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+vft-linux = { path = "../vft-linux" }
 ashpd = { version = "=0.14.0", default-features = false, features = ["tokio", "screencast"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "time", "macros"] }
 pipewire = "=0.10.1"
-
-[lints]
-workspace = true

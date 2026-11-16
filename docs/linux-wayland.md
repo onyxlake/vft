@@ -1,6 +1,6 @@
 # Linux Wayland sender and receiver
 
-`vft-send-linux` and `vft-recv-linux` use the shared v0 protocol, FEC, visual codec and
+`vft-send` and `vft-recv` use the shared v0 protocol, FEC, visual codec and
 sender/receiver sessions. They run on Wayland; X11 is not implemented.
 
 ## Build and runtime requirements
@@ -23,11 +23,11 @@ providing ScreenCast (for example GNOME, KDE or a supported wlroots backend).
 Install/configure the backend for your desktop; the applications do not change services.
 
 ```sh
-cargo build --release -p vft-send-linux -p vft-recv-linux
+cargo build --release -p vft-send -p vft-recv
 mkdir -p output
 # Run the sender and receiver in separate terminals:
-./target/release/vft-send-linux input.bin --profile balanced --fps 15 --cell-size 4
-./target/release/vft-recv-linux --auto --output recovered.bin --preview output/crop.bmp
+./target/release/vft-send input.bin --profile balanced --fps 15 --cell-size 4
+./target/release/vft-recv --auto --output recovered.bin --preview output/crop.bmp
 ```
 
 Use `cargo metadata` to locate binaries if Cargo uses a custom target directory.

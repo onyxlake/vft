@@ -68,7 +68,7 @@ class ReleasePackages(unittest.TestCase):
     def test_zip_contains_only_binaries_preserves_bytes_mode_and_existing_archive(self):
         binaries = []
         for kind in ("send", "recv"):
-            path = self.root / f"vft-{kind}-linux"
+            path = self.root / f"vft-{kind}"
             path.write_bytes(executable_header("linux", "386") + kind.encode())
             path.chmod(0o755)
             binaries.append(path)
@@ -78,7 +78,7 @@ class ReleasePackages(unittest.TestCase):
         release.write_zip(binaries, destination)
         original = destination.read_bytes()
         with zipfile.ZipFile(destination) as archive:
-            self.assertEqual(archive.namelist(), [path.name for path in binaries])
+            self.assertEqual(archive.namelist(), ["vft-send", "vft-recv"])
             for path in binaries:
                 self.assertEqual(archive.read(path.name), path.read_bytes())
                 # Unix ZIP metadata preserves execution rights on Linux builds.
@@ -93,13 +93,17 @@ class ReleasePackages(unittest.TestCase):
         directory = self.root / "custom-target" / target / "release"
         directory.mkdir(parents=True)
         for kind in ("send", "recv"):
-            (directory / f"vft-{kind}-win.exe").write_bytes(executable_header("windows", "386"))
+            (directory / f"vft-{kind}.exe").write_bytes(executable_header("windows", "386"))
         metadata = {"target_directory": str(self.root / "custom-target"),
                     "packages": [{"name": "vft-protocol", "version": "0.1.0"}]}
         with patch.object(release, "ROOT", self.root), patch.object(release, "command", return_value=json.dumps(metadata)):
             release.package(target, "v1.2.3")
             archive = self.root / "output/release/vft-v1.2.3-windows-386.zip"
             self.assertTrue(archive.is_file())
+            with zipfile.ZipFile(archive) as packaged:
+                self.assertEqual(packaged.namelist(), ["vft-send.exe", "vft-recv.exe"])
+                for name in packaged.namelist():
+                    self.assertEqual(packaged.read(name), (directory / name).read_bytes())
             with self.assertRaises(FileExistsError):
                 release.package(target, "v1.2.3")
             release.package(target, "v1.2.3", Path("output/custom"))
@@ -107,7 +111,7 @@ class ReleasePackages(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.package(target, "v1.2.3", self.root / "outside")
             # Reject a mislabeled 64-bit sender before writing any new archive.
-            (directory / "vft-send-win.exe").write_bytes(executable_header("windows", "amd64"))
+            (directory / "vft-send.exe").write_bytes(executable_header("windows", "amd64"))
             with self.assertRaises(ValueError):
                 release.package(target, "v2.0.0")
             self.assertFalse((archive.parent / "vft-v2.0.0-windows-386.zip").exists())

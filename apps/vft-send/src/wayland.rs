@@ -35,7 +35,7 @@ struct Options {
 }
 fn options(args: &[String]) -> Result<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-send-linux FILE [--profile balanced|robust] [--fps 15] [--cell-size 8]\n  [--fullscreen] [--frames N] [--tui | --no-tui]\nNative Wayland only. ESC exits; SPACE pauses; F11 toggles fullscreen.\nCell size is in physical buffer pixels; resized windows center an integer-cell frame.");
+        println!("vft-send FILE [--profile balanced|robust] [--fps 15] [--cell-size 8]\n  [--fullscreen] [--frames N] [--tui | --no-tui]\nNative Wayland only. ESC exits; SPACE pauses; F11 toggles fullscreen.\nCell size is in physical buffer pixels; resized windows center an integer-cell frame.");
         return Ok(None);
     }
     let mut o = Options {

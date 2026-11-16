@@ -3,7 +3,7 @@
 Run each binary with `--help` for its usage text. Windows executables are under
 `target\release\` after a release build; Linux executables are under `target/release/`,
 unless Cargo uses a custom target directory. In PowerShell, include a path such as
-`.\target\release\vft-send-win.exe`.
+`.\target\release\vft-send.exe`.
 
 ## Sender
 

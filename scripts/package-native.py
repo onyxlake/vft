@@ -176,7 +176,7 @@ def linux_packages(binaries, version, arch, work, destinations):
         "%description\nTransfers files through independent visual frames in a Wayland session.\n"
         "Capture requires a configured ScreenCast portal backend.\n\n"
         f"%install\nmkdir -p {quote(buildroot)}\ncp -a {quote(str(payload) + '/.')} {quote(buildroot)}\n\n"
-        "%files\n%defattr(-,root,root,-)\n/usr/bin/vft-send-linux\n/usr/bin/vft-recv-linux\n"
+        "%files\n%defattr(-,root,root,-)\n/usr/bin/vft-send\n/usr/bin/vft-recv\n"
         "%license /usr/share/licenses/vft/LICENSE\n",
         encoding="utf-8",
     )
@@ -195,7 +195,7 @@ def package(target, version=None, output_dir=None):
     metadata = json.loads(command("cargo", "metadata", "--locked", "--no-deps",
                                   "--format-version", "1", capture=True))
     platform, arch = TARGETS[target]
-    suffix = "-win.exe" if platform == "windows" else "-linux"
+    suffix = ".exe" if platform == "windows" else ""
     workspace_version = next(p["version"] for p in metadata["packages"] if p["name"] == "vft-protocol")
     version = version or build_version(workspace_version, os.environ)
     version_parts(version)

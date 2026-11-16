@@ -28,7 +28,7 @@ struct Options {
 }
 fn options(args: &[String]) -> Result<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-recv-linux (--auto | --rect X Y WIDTH HEIGHT)\n  [--output FILE] [--output-dir DIR]\n  [--search-rect X Y WIDTH HEIGHT] [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--max-file-size 268435456]\n  [--preview FILE.bmp] [--stats FILE.csv] [--tui | --no-tui]\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nChoose a monitor/window in the ScreenCast portal. Coordinates are selected-stream pixels,\nnot global desktop coordinates. Output, preview and statistics must be new, distinct files.");
+        println!("vft-recv (--auto | --rect X Y WIDTH HEIGHT)\n  [--output FILE] [--output-dir DIR]\n  [--search-rect X Y WIDTH HEIGHT] [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--max-file-size 268435456]\n  [--preview FILE.bmp] [--stats FILE.csv] [--tui | --no-tui]\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nChoose a monitor/window in the ScreenCast portal. Coordinates are selected-stream pixels,\nnot global desktop coordinates. Output, preview and statistics must be new, distinct files.");
         return Ok(None);
     }
     let mut o = Options {

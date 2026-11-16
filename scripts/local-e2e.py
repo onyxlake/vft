@@ -51,7 +51,7 @@ def transfer(args, directory, target, size):
     capture_mode = "--auto" if args.auto_locate else "--rect" if args.manual_rect else "--sender-window"
     with ExitStack() as stack:
         sender = stack.enter_context(LoggedProcess([
-            executable(target, "vft-send-win"), input_path, "--no-tui", "--profile", args.profile,
+            executable(target, "vft-send"), input_path, "--no-tui", "--profile", args.profile,
             "--fps", args.fps, "--cell-size", args.cell_size, "--topmost", "--rect-file", rect_path,
         ], directory, f"{size}-sender"))
         sender_metrics = stack.enter_context(ProcessMetrics(sender))
@@ -61,7 +61,7 @@ def transfer(args, directory, target, size):
         if args.manual_rect:
             capture.extend(wait_for_rectangle(rect_path, sender))
         receiver = stack.enter_context(LoggedProcess([
-            executable(target, "vft-recv-win"), *capture, "--no-tui", *output_options,
+            executable(target, "vft-recv"), *capture, "--no-tui", *output_options,
             "--fps", "120", "--timeout", args.timeout_seconds, "--stats", stats_path,
             "--preview", directory / f"{size}-preview.bmp",
         ], directory, f"{size}-receiver", cwd=receiver_cwd))

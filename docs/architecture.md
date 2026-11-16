@@ -10,9 +10,8 @@
 | `crates/vft-sender` | Random-access source and manifest/source/repair scheduling |
 | `crates/vft-receiver` | Session discovery, symbol collection, recovery and hash verification |
 | `crates/vft-testkit` | Seeded distortion simulation and headless integration tooling |
-| `apps/vft-send-win` / `apps/vft-recv-win` | Win32/GDI presentation, physical capture and file adapters |
+| `apps/vft-send` / `apps/vft-recv` | Native entry points with target-selected Windows or Linux adapters |
 | `apps/vft-linux` | Shared Linux file, pixel and recovery adapters |
-| `apps/vft-send-linux` / `apps/vft-recv-linux` | Wayland presentation and ScreenCast/PipeWire capture |
 | `apps/vft-send-web` | Bounded Worker File API source, WASM core and Canvas presentation |
 | `apps/vft-tui` | Shared native terminal models, controls and rendering |
 
@@ -25,6 +24,9 @@ Screen capture → visual sampling → CRC-validated packets → receiver/FEC �
 They use no filesystem, Windows, UI or capture APIs. `vft-testkit` uses std for test tooling.
 The only external shared dependency is SHA-256 (`sha2` with default features disabled).
 Windows APIs are target-specific dependencies of the two applications.
+Each application has one binary name across platforms: `vft-send` or `vft-recv`, with `.exe`
+on Windows. Compile-time target selection includes `win` for Win32/GDI or `wayland` for
+Wayland presentation and ScreenCast/PipeWire capture; desktop dependencies remain target-specific.
 
 ## Terminal integration
 

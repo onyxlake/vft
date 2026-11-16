@@ -26,7 +26,7 @@ browser fullscreen. The browser must allow the fullscreen request from a user ac
 On the receiving Windows desktop, build the native receiver and run:
 
 ```powershell
-.\target\release\vft-recv-win.exe --auto --output recovered.bin --preview crop.bmp
+.\target\release\vft-recv.exe --auto --output recovered.bin --preview crop.bmp
 ```
 
 Keep the complete Canvas visible. The page fits integer physical cell sizes to the available

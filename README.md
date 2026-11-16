@@ -22,20 +22,22 @@ A browser sender runs from a self-contained HTML file. The five shared Rust core
 
 Run the commands below from the repository root. Cargo's default binary directory is shown;
 use `cargo metadata` to find it if you configured a different target directory.
+Both platforms build `vft-send` and `vft-recv` (`.exe` on Windows). Cargo selects the native
+implementation for the build target; release archive names still identify the platform and architecture.
 
 ## Windows
 
 Build on Windows:
 
 ```powershell
-cargo build --release -p vft-send-win -p vft-recv-win
+cargo build --release -p vft-send -p vft-recv
 ```
 
 In separate terminals, start the sender and receiver:
 
 ```powershell
-.\target\release\vft-send-win.exe input.bin --profile balanced --fps 15 --topmost
-.\target\release\vft-recv-win.exe --auto --output recovered.bin
+.\target\release\vft-send.exe input.bin --profile balanced --fps 15 --topmost
+.\target\release\vft-recv.exe --auto --output recovered.bin
 ```
 
 For remote desktop use, run the sender on the remote machine and the receiver on the machine
@@ -48,10 +50,10 @@ client area; `--rect X Y WIDTH HEIGHT` accepts an exact physical-pixel crop.
 After installing the [system dependencies](docs/linux-wayland.md):
 
 ```sh
-cargo build --release -p vft-send-linux -p vft-recv-linux
+cargo build --release -p vft-send -p vft-recv
 # Run these in separate terminals:
-./target/release/vft-send-linux input.bin --profile balanced --fps 15 --cell-size 4
-./target/release/vft-recv-linux --auto --output recovered.bin
+./target/release/vft-send input.bin --profile balanced --fps 15 --cell-size 4
+./target/release/vft-recv --auto --output recovered.bin
 ```
 
 Select the sender window or its monitor in the ScreenCast picker. Linux rectangles use physical

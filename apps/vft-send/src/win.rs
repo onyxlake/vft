@@ -67,7 +67,7 @@ struct Options {
 fn options() -> AppResult<Option<Options>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
-        println!("vft-send-win FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send-win --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--rect-file reserves a new file; existing files are never overwritten.\nESC exits; SPACE pauses; F11 toggles fullscreen.");
+        println!("vft-send FILE [--profile robust|balanced] [--fps 15] [--cell-size 8] [--fullscreen]\n  [--topmost] [--frames N] [--rect-file PATH] [--position X Y]\nvft-send --test-pattern\n  [--tui | --no-tui] (interactive terminals default to TUI)\n--rect-file reserves a new file; existing files are never overwritten.\nESC exits; SPACE pauses; F11 toggles fullscreen.");
         return Ok(None);
     }
     let mut out = Options {
