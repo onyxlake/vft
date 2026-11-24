@@ -13,7 +13,7 @@ repair frames until stopped; it cannot infer receiver completion.
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
-| `FILE` | Required | Source file; Linux requires a regular file |
+| `FILE` | Required outside Git mode | Source file; Linux requires a regular file |
 | `--profile robust\|balanced` | `balanced` | Standard visual lattice and luminance levels |
 | `--fps N` | `15` | Requested presentation rate, integer 1–60 |
 | `--cell-size N` | Balanced: `8`; robust: `16` | Initial cell size, 2–32 physical pixels |
@@ -83,6 +83,36 @@ desktop coordinates. Manual/search rectangles must be at least 192×108 pixels, 
 origins and right/bottom edges within 8192. Balanced still needs at least 384×216 pixels.
 The complete stream must fit within 8192×8192 even when restricting search.
 See [Linux capture requirements](linux-wayland.md#capture-and-recovery).
+
+## Git mode
+
+| Argument | Sender | Receiver |
+| --- | --- | --- |
+| `--git` | Use repository containing the current directory | Same |
+| `--git-repo PATH` | Explicit repository; enables Git mode and overrides `--git` | Same |
+| `--git-base FULL_OID` | Required full receiver baseline commit | Not accepted |
+| `--git-ref REF` | Target committed ref, default `HEAD` | Not accepted |
+| `--git-package FILE` | New package path; default `<OS temp>/vft-git-ID/update.vftgit` | Not accepted |
+| `--git-prepare-only` | Retain package and print path without opening a visual window | Not accepted |
+| `--git-branch BRANCH` | Not accepted | Must match currently checked-out branch; defaults to it |
+| `--git-apply FILE` | Not accepted | Apply a retained package offline, without capture |
+
+`FILE` and `--test-pattern` are mutually exclusive with Git sending. Git flags require `--git`
+or `--git-repo`; `--git-base` is mandatory even for preparation only. Package parents must exist,
+and existing files are never overwritten. No-change B == T creates no package.
+
+Receiving Git mode normally requires one capture mode. `--git-apply` instead requires no capture
+mode and rejects output/preview/stats options because it uses an existing file. Both paths honor
+`--max-file-size` (default 256 MiB), and complete packages remain available after failure.
+Without explicit `--output` **and** `--output-dir`, Git capture creates
+`<OS temp>/vft-git-recv-ID/received.vftgit`. An explicit output directory continues to use the safe
+manifest filename; an explicit file always wins. Ordinary file output defaults remain unchanged.
+
+Git mode requires Git 2.48+; ordinary mode does not. Detached/unborn HEADs, dirty receiving
+worktrees/indexes, wrong explicit branches and incomplete repositories fail before capture.
+The receiver records its startup branch/HEAD and rechecks them before applying. It never switches
+branches or resets user changes. See [Git synchronization](git-sync.md) for unsupported repositories,
+external filters, backup refs, cancellation boundaries and offline retry examples.
 
 ## Output rules
 

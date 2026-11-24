@@ -347,6 +347,7 @@ mod tests {
         let now = Instant::now();
         let (_, commands) = mpsc::sync_channel(32);
         let options = super::super::Options {
+            git: Default::default(),
             rect: None,
             search: None,
             output: crate::output::OutputDestination::explicit("unused".into()),
@@ -359,6 +360,9 @@ mod tests {
             tui: Some(false),
         };
         let mut state = State {
+            git_session: None,
+            transfer_finished: None,
+            complete: false,
             options,
             decoder: vft_linux::Decoder::new(None, None, None, 0),
             start: now,

@@ -1,3 +1,6 @@
+#[cfg(any(windows, target_os = "linux"))]
+#[path = "../../sender_git.rs"]
+mod git;
 #[cfg(any(windows, test))]
 mod rect_file;
 #[cfg(target_os = "linux")]

@@ -1,3 +1,5 @@
+#[cfg(any(windows, target_os = "linux"))]
+mod git;
 #[cfg(any(windows, target_os = "linux", test))]
 #[path = "../../receiver_output.rs"]
 mod output;
@@ -26,3 +28,7 @@ fn main() {
         std::process::exit(1);
     }
 }
+
+#[cfg(test)]
+#[path = "../../vft-git/tests/common/mod.rs"]
+mod git_fixture;

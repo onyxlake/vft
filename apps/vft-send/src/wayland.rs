@@ -25,6 +25,7 @@ use winit::{
 };
 
 struct Options {
+    git: vft_git::cli::SenderOptions,
     file: PathBuf,
     profile: ProfileId,
     fps: u32,
@@ -36,9 +37,12 @@ struct Options {
 fn options(args: &[String]) -> Result<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         println!("vft-send FILE [--profile balanced|robust] [--fps 15] [--cell-size 8]\n  [--fullscreen] [--frames N] [--tui | --no-tui]\nNative Wayland only. ESC exits; SPACE pauses; F11 toggles fullscreen.\nCell size is in physical buffer pixels; resized windows center an integer-cell frame.");
+        println!("{}", vft_git::cli::SEND_HELP);
         return Ok(None);
     }
+    let (git, args) = vft_git::cli::SenderOptions::extract(args)?;
     let mut o = Options {
+        git,
         file: PathBuf::new(),
         profile: ProfileId::Balanced,
         fps: 15,
@@ -73,7 +77,12 @@ fn options(args: &[String]) -> Result<Option<Options>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if o.file.as_os_str().is_empty() || !(1..=60).contains(&o.fps) || o.frames == Some(0) {
+    o.git
+        .validate_source(!o.file.as_os_str().is_empty(), false)?;
+    if (o.file.as_os_str().is_empty() && o.git.repo.is_none())
+        || !(1..=60).contains(&o.fps)
+        || o.frames == Some(0)
+    {
         return Err("supply FILE, FPS 1..60 and a positive frame count".into());
     }
     if o.cell == 0 {
@@ -346,6 +355,13 @@ pub fn run() -> Result<()> {
         std::io::stdout().is_terminal(),
     )?;
     options.tui = Some(tui);
+    if options.git.repo.is_some() {
+        let Some(path) = crate::git::prepare(&options.git, tui)? else {
+            return Ok(());
+        };
+        options.file = path;
+    }
+
     // File validation and hashing precede any Wayland/terminal setup.
     let sender = open_sender(&options.file, options.profile)?;
     if !tui {
@@ -435,6 +451,27 @@ mod tests {
             vec!["f", "--tui", "--no-tui"],
         ] {
             assert!(options(&args.into_iter().map(String::from).collect::<Vec<_>>()).is_err());
+        }
+    }
+}
+
+#[cfg(test)]
+mod git_option_tests {
+    use super::*;
+    #[test]
+    fn git_sender_requires_baseline_and_conflicts_with_file() {
+        let parse = |args: &[&str]| options(&args.iter().map(|v| (*v).into()).collect::<Vec<_>>());
+        let options = parse(&["--git", "--git-base", "abc", "--git-prepare-only"])
+            .unwrap()
+            .unwrap();
+        assert!(options.git.prepare_only);
+        assert_eq!(options.git.repo.as_deref(), Some(std::path::Path::new(".")));
+        for args in [
+            vec!["--git"],
+            vec!["file", "--git", "--git-base", "abc"],
+            vec!["--git-base", "abc"],
+        ] {
+            assert!(parse(&args).is_err());
         }
     }
 }

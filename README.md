@@ -12,6 +12,7 @@ A browser sender runs from a self-contained HTML file. The five shared Rust core
 ## Build requirements
 
 - Rust **1.99.1** or newer; `rust-toolchain.toml` pins 1.99.1, rustfmt, Clippy and the WASM target.
+- Git **2.48+** for Git mode and isolated repository tests; ordinary file transfer does not invoke Git.
 - Python **3.9+** for development scripts; no Python packages are required. Use `python3` on
   Linux when `python` is unavailable. Node.js **22+** is needed only for browser development tests.
 - Windows MSVC builds need the C++ build tools and Windows SDK. Copied MSVC executables normally
@@ -74,9 +75,35 @@ Copying that single HTML file is sufficient; no server, external assets or uploa
 Its embedded license notices must remain when redistributing it. Start a native receiver with
 `--auto` on the receiving desktop. See [browser requirements and controls](docs/wasm-sender.md).
 
+## Incremental Git updates
+
+Git mode updates an existing complete repository's checked-out branch from its current commit
+to a newer committed target, using an offline Git bundle over the same single-file visual channel.
+It requires Git 2.48+ on native Git endpoints; ordinary file mode has no Git runtime dependency.
+First read the receiver's full baseline with `git rev-parse HEAD`, then run:
+
+```sh
+# Receiving repository (or a subdirectory):
+vft-recv --git --auto
+# Sending repository: replace FULL_RECEIVER_OID with that complete baseline:
+vft-send --git --git-base FULL_RECEIVER_OID
+# Prepare a retained package for browser sending, without a visual window:
+vft-send --git --git-base FULL_RECEIVER_OID --git-prepare-only
+# Retry a saved package without screen capture:
+vft-recv --git --git-apply /path/to/received.vftgit
+```
+
+`--git-repo PATH` explicitly selects a repository and overrides `--git`. The receiver defaults
+to its checked-out branch and a new system temporary package path, unless `--output` or
+`--output-dir` is supplied. Complete packages are retained on success or application failure.
+Only a verified repository update reports overall completion. Keep the receiving repository
+clean and unused by other Git operations during the transfer. Shallow/partial repositories,
+LFS, submodules and external filters are unsupported. See the [Git synchronization guide](docs/git-sync.md)
+for branch guards, package locations, limits and failure recovery.
+
 ## Output and controls
 
-Without `--output`, native receivers save the manifest filename in `--output-dir DIR`, defaulting
+In ordinary file mode, without `--output`, native receivers save the manifest filename in `--output-dir DIR`, defaulting
 to the current directory. An explicit `--output FILE` takes precedence. Destination directories
 must exist; output, preview and statistics files must be new and distinct. For a local transfer,
 choose a new output name or a different directory so the source is not also the destination.
@@ -107,6 +134,7 @@ Esc/Space/F11 controls and must remain clear of the terminal. See [terminal cont
 
 | Guide | Contents |
 | --- | --- |
+| [Git synchronization](docs/git-sync.md) / [package format](docs/git-package-format.md) | Offline incremental commits, application guards and retry |
 | [CLI reference](docs/cli.md) | Native arguments, capture modes, output paths and limits |
 | [Terminal controls](docs/terminal-controls.md) | TUI navigation and optional manual repair |
 | [Linux Wayland](docs/linux-wayland.md) | Dependencies, presentation and portal capture |

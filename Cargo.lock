@@ -2353,6 +2353,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vft-git"
+version = "0.1.0"
+dependencies = [
+ "getrandom 0.4.3",
+ "libc",
+ "sha2",
+ "vft-protocol",
+ "vft-receiver",
+ "vft-sender",
+ "vft-visual",
+ "windows",
+]
+
+[[package]]
 name = "vft-linux"
 version = "0.1.0"
 dependencies = [
@@ -2384,6 +2398,7 @@ dependencies = [
  "ashpd",
  "pipewire",
  "tokio",
+ "vft-git",
  "vft-linux",
  "vft-protocol",
  "vft-receiver",
@@ -2397,6 +2412,7 @@ name = "vft-send"
 version = "0.1.0"
 dependencies = [
  "softbuffer",
+ "vft-git",
  "vft-linux",
  "vft-protocol",
  "vft-sender",

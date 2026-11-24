@@ -28,7 +28,7 @@ use windows::{
         UI::{HiDpi::*, WindowsAndMessaging::*},
     },
 };
-type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
+type AppResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Region {
@@ -52,6 +52,7 @@ impl Region {
     }
 }
 struct Options {
+    git: vft_git::cli::ReceiverOptions,
     tui: Option<bool>,
     rect: Option<Region>,
     sender_window: bool,
@@ -72,9 +73,13 @@ fn options() -> AppResult<Option<Options>> {
 fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
     if args.is_empty() || args.iter().any(|s| s == "--help" || s == "-h") {
         println!("vft-recv (--auto | --rect X Y WIDTH HEIGHT | --sender-window)\n  [--output FILE] [--output-dir DIR]\n  [--profile auto|robust|balanced] [--fps 30] [--timeout 3600]\n  [--stats FILE.csv] [--preview FILE.bmp] [--max-file-size BYTES]\n  [--search-rect X Y WIDTH HEIGHT] (only with --auto)\n  [--tui | --no-tui] (interactive terminals default to TUI)\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nOutput, preview and statistics must be new, distinct files.\n--auto locates a visible VFT frame on the desktop and reacquires after movement.\n--rect must contain only the entire visual frame. --sender-window follows a local sender.");
+        println!("{}", vft_git::cli::RECV_HELP);
         return Ok(None);
     }
+    let (git, args) = vft_git::cli::ReceiverOptions::extract(args)?;
+    let explicit_directory = args.iter().any(|a| a == "--output-dir");
     let mut out = Options {
+        git,
         tui: None,
         rect: None,
         sender_window: false,
@@ -134,18 +139,32 @@ fn parse_options(args: &[String]) -> AppResult<Option<Options>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if usize::from(out.rect.is_some()) + usize::from(out.sender_window) + usize::from(out.auto) != 1
+    if usize::from(out.rect.is_some()) + usize::from(out.sender_window) + usize::from(out.auto)
+        != usize::from(!out.git.is_offline())
         || (out.search_rect.is_some() && !out.auto)
         || !(1..=120).contains(&out.fps)
         || out.timeout == 0
     {
         return Err(
-            "supply exactly one of --auto/--rect/--sender-window, FPS 1..120 and positive timeout; --search-rect requires --auto"
+            "supply exactly one of --auto/--rect/--sender-window (or --git-apply without capture), FPS 1..120 and positive timeout; --search-rect requires --auto"
                 .into(),
         );
     }
-    out.output
-        .validate(out.preview.as_deref(), out.stats.as_deref())?;
+    if out.git.is_offline() {
+        if out.output.file.is_some()
+            || explicit_directory
+            || out.preview.is_some()
+            || out.stats.is_some()
+        {
+            return Err("--git-apply uses an existing package; output/preview/stats options require capture".into());
+        }
+    } else {
+        if out.git.repo.is_some() {
+            out.output.git_default(explicit_directory)?;
+        }
+        out.output
+            .validate(out.preview.as_deref(), out.stats.as_deref())?;
+    }
     Ok(Some(out))
 }
 
@@ -426,6 +445,41 @@ fn warn(ui: Option<&ReceiveUi>, message: String) {
     }
 }
 fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
+    let mut control = vft_git::Control::default();
+    if let Some(ui) = ui {
+        control.cancel = ui.cancel.clone();
+    }
+    let _interrupt = if options.git.repo.is_some() && ui.is_none() {
+        Some(vft_git::InterruptGuard::install(control.cancel.clone())?)
+    } else {
+        None
+    };
+    let git_session = options.git.open(&control)?;
+    if let Some(session) = &git_session {
+        report(
+            ui,
+            format!(
+                "Git receiving branch={} baseline={}",
+                session.branch, session.head
+            ),
+        );
+        if let Some(path) = options.git.apply_path() {
+            let result = crate::git::apply(
+                session,
+                path,
+                options.max_file_size,
+                ui.map(|u| &u.shared),
+                ui.map(|u| &u.cancel),
+            )?;
+            if let Some(ui) = ui {
+                let mut view = ui.shared.lock().unwrap();
+                view.state = Lifecycle::Complete;
+                view.result = result.clone();
+            }
+            report(ui, format!("COMPLETE {result}"));
+            return Ok(());
+        }
+    }
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
@@ -448,6 +502,10 @@ fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
     let mut previous = (0u64, 0u64, 0u64);
     loop {
         let iteration = Instant::now();
+        if ui.is_none() && control.cancel.load(std::sync::atomic::Ordering::Acquire) {
+            save_stats(&options, &receiver, &metrics, start.elapsed())?;
+            return Err("Git capture stopped before verified completion".into());
+        }
         if let Some(ui) = ui {
             if vft_tui::stopped(&ui.cancel) {
                 ui.shared.lock().unwrap().state = Lifecycle::Stopping;
@@ -705,18 +763,35 @@ fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
             let output = options
                 .output
                 .path()
-                .ok_or("missing resolved output path")?;
-            save_verified(&receiver, output)
+                .ok_or("missing resolved output path")?
+                .to_path_buf();
+            if let Some(ui) = ui {
+                ui.shared.lock().unwrap().state = Lifecycle::Verifying;
+            }
+            save_verified(&receiver, &output)
                 .map_err(|e| format!("Verified output creation/write failed: {e}"))?;
+            options.output.preserve_git_package();
             save_stats(&options, &receiver, &metrics, start.elapsed())?;
             let elapsed = start.elapsed().as_secs_f64();
+            let git_result = if let Some(session) = &git_session {
+                crate::git::apply(
+                    session,
+                    &output,
+                    options.max_file_size,
+                    ui.map(|u| &u.shared),
+                    ui.map(|u| &u.cancel),
+                )?
+            } else {
+                String::new()
+            };
             if let Some(ui) = ui {
                 let mut v = ui.shared.lock().unwrap();
                 v.state = Lifecycle::Complete;
                 vft_tui::update_groups(&mut v, &receiver, 0);
                 v.result = format!(
-                    "Complete - SHA-256 verified and saved to {}",
-                    vft_tui::safe_text(&output.display().to_string())
+                    "Complete - SHA-256 verified and saved to {}. {}",
+                    vft_tui::safe_text(&output.display().to_string()),
+                    git_result
                 );
                 v.details = vec![
                     v.result.clone(),
@@ -726,6 +801,9 @@ fn run_capture(mut options: Options, ui: Option<&ReceiveUi>) -> AppResult<()> {
                         receiver.progress().recovered_bytes as f64 / elapsed / 1024.0
                     ),
                 ];
+            }
+            if !git_result.is_empty() {
+                report(ui, git_result);
             }
             report(ui, format!("COMPLETE sha256=verified bytes={} elapsed={elapsed:.3}s goodput={:.1} KiB/s progress={:?} invalid_frames={} output={}",
                 receiver.progress().recovered_bytes,receiver.progress().recovered_bytes as f64/elapsed/1024.0,receiver.progress(),metrics.invalid_frames,vft_tui::safe_text(&output.display().to_string())));
@@ -961,6 +1039,7 @@ mod tests {
         file.write_all(b"verified file bytes").unwrap();
         drop(file);
         let options = Options {
+            git: Default::default(),
             tui: Some(false),
             rect: None,
             sender_window: true,
@@ -983,5 +1062,58 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"verified file bytes");
         std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod git_option_tests {
+    use super::*;
+    #[test]
+    fn git_capture_output_priority_and_offline_mode() {
+        let parse =
+            |args: &[&str]| parse_options(&args.iter().map(|v| (*v).into()).collect::<Vec<_>>());
+        let auto = parse(&["--git", "--auto"]).unwrap().unwrap();
+        assert_eq!(
+            auto.output.file.as_ref().unwrap().file_name().unwrap(),
+            "received.vftgit"
+        );
+        let dir = crate::output::test_directory();
+        let file = dir.join("chosen.vftgit");
+        let missing = dir.join("unused-missing");
+        let mut directory = parse(&["--git", "--auto", "--output-dir", dir.to_str().unwrap()])
+            .unwrap()
+            .unwrap();
+        assert!(directory.output.file.is_none());
+        assert_eq!(
+            directory
+                .output
+                .resolve("original.vftgit", None, None)
+                .unwrap(),
+            dir.join("original.vftgit")
+        );
+        let explicit = parse(&[
+            "--git",
+            "--auto",
+            "--output-dir",
+            missing.to_str().unwrap(),
+            "--output",
+            file.to_str().unwrap(),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(explicit.output.file.as_deref(), Some(file.as_path()));
+        let offline = parse(&["--git", "--git-apply", "existing.vftgit"])
+            .unwrap()
+            .unwrap();
+        assert!(offline.git.is_offline());
+        assert!(offline.output.file.is_none());
+        for args in [
+            vec!["--git", "--git-apply", "existing", "--auto"],
+            vec!["--git", "--git-apply", "existing", "--output-dir", "."],
+            vec!["--git"],
+            vec!["--git-apply", "existing"],
+        ] {
+            assert!(parse(&args).is_err());
+        }
     }
 }

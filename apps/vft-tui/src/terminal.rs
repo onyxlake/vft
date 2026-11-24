@@ -138,6 +138,36 @@ pub fn random_id() -> Result<u64, String> {
     Ok(u64::from_le_bytes(bytes))
 }
 
+/// Cancellable preparation before the visual window exists. Return to the caller
+/// when its worker finishes so the normal sender terminal can take over.
+pub fn startup_ui(shared: SharedView, cancel: Stop) -> io::Result<()> {
+    let (mut screen, _restore) = Screen::open()?;
+    loop {
+        let view = shared.lock().unwrap().clone();
+        if view.worker_done {
+            return Ok(());
+        }
+        screen.terminal.draw(|f| {
+            draw(
+                f,
+                &view,
+                safe_text(&view.result),
+                "Q / Ctrl+C: cancel preparation",
+                "",
+                0,
+            )
+        })?;
+        if let Some(Event::Key(key)) = next_event()? {
+            if key.kind != KeyEventKind::Release
+                && (quit(&key) || matches!(key.code, KeyCode::Char('q' | 'Q')))
+            {
+                stop(&cancel);
+                shared.lock().unwrap().state = Lifecycle::Stopping;
+            }
+        }
+    }
+}
+
 pub fn sender_ui(
     shared: SharedView,
     cancel: Stop,

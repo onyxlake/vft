@@ -8,6 +8,7 @@ pub struct OutputDestination {
     pub file: Option<PathBuf>,
     pub directory: PathBuf,
     resolved: Option<PathBuf>,
+    git_temp: Option<vft_git::TempDir>,
 }
 
 impl Default for OutputDestination {
@@ -16,11 +17,25 @@ impl Default for OutputDestination {
             file: None,
             directory: PathBuf::from("."),
             resolved: None,
+            git_temp: None,
         }
     }
 }
 
 impl OutputDestination {
+    pub fn git_default(&mut self, explicit_directory: bool) -> vft_git::Result<()> {
+        if self.file.is_none() && !explicit_directory {
+            let temp = vft_git::TempDir::new("vft-git-recv")?;
+            self.file = Some(temp.path().join("received.vftgit"));
+            self.git_temp = Some(temp);
+        }
+        Ok(())
+    }
+    pub fn preserve_git_package(&mut self) {
+        if let Some(temp) = &mut self.git_temp {
+            temp.preserve();
+        }
+    }
     #[cfg(test)]
     pub fn explicit(file: PathBuf) -> Self {
         Self {
@@ -192,6 +207,53 @@ mod tests {
         io::Write,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn git_output_precedence_and_retention() {
+        let dir = test_directory();
+        let mut automatic = OutputDestination::default();
+        automatic.git_default(false).unwrap();
+        let file = automatic.file.clone().unwrap();
+        automatic.validate(None, None).unwrap();
+        assert_eq!(
+            automatic.resolve("original.vftgit", None, None).unwrap(),
+            file
+        );
+        assert_eq!(file.file_name().unwrap(), "received.vftgit");
+        drop(automatic);
+        assert!(!file.parent().unwrap().exists());
+        let mut directory = OutputDestination {
+            directory: dir.clone(),
+            ..Default::default()
+        };
+        directory.git_default(true).unwrap();
+        directory.validate(None, None).unwrap();
+        assert_eq!(
+            directory.resolve("original.vftgit", None, None).unwrap(),
+            dir.join("original.vftgit")
+        );
+        let mut explicit = OutputDestination::explicit(dir.join("chosen.vftgit"));
+        explicit.directory = dir.join("missing");
+        explicit.git_default(true).unwrap();
+        explicit.validate(None, None).unwrap();
+        assert_eq!(
+            explicit.resolve("original.vftgit", None, None).unwrap(),
+            dir.join("chosen.vftgit")
+        );
+        let mut kept = OutputDestination::default();
+        kept.git_default(false).unwrap();
+        let file = kept.file.clone().unwrap();
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file)
+            .unwrap()
+            .write_all(b"complete package")
+            .unwrap();
+        kept.preserve_git_package();
+        drop(kept);
+        assert_eq!(fs::read(file).unwrap(), b"complete package");
+    }
 
     #[test]
     fn defaults_and_directory_use_metadata_while_explicit_output_wins() {

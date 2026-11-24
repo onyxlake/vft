@@ -15,6 +15,7 @@ use vft_tui::{
 use vft_visual::{ImageRect, LumaImage};
 
 struct Options {
+    git: vft_git::cli::ReceiverOptions,
     rect: Option<ImageRect>,
     search: Option<ImageRect>,
     output: OutputDestination,
@@ -29,9 +30,13 @@ struct Options {
 fn options(args: &[String]) -> Result<Option<Options>> {
     if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
         println!("vft-recv (--auto | --rect X Y WIDTH HEIGHT)\n  [--output FILE] [--output-dir DIR]\n  [--search-rect X Y WIDTH HEIGHT] [--profile auto|robust|balanced]\n  [--fps 30] [--timeout 3600] [--max-file-size 268435456]\n  [--preview FILE.bmp] [--stats FILE.csv] [--tui | --no-tui]\nWithout --output, save the metadata filename in --output-dir (default: current directory).\nThe directory must exist. --output uses its exact path and overrides --output-dir.\nChoose a monitor/window in the ScreenCast portal. Coordinates are selected-stream pixels,\nnot global desktop coordinates. Output, preview and statistics must be new, distinct files.");
+        println!("{}", vft_git::cli::RECV_HELP);
         return Ok(None);
     }
+    let (git, args) = vft_git::cli::ReceiverOptions::extract(args)?;
+    let explicit_directory = args.iter().any(|a| a == "--output-dir");
     let mut o = Options {
+        git,
         rect: None,
         search: None,
         output: OutputDestination::default(),
@@ -89,18 +94,31 @@ fn options(args: &[String]) -> Result<Option<Options>> {
             _ => return Err(format!("unknown argument: {arg}").into()),
         }
     }
-    if auto == o.rect.is_some()
+    if usize::from(auto) + usize::from(o.rect.is_some()) != usize::from(!o.git.is_offline())
         || (o.search.is_some() && !auto)
         || !(1..=120).contains(&o.fps)
         || o.timeout == 0
     {
-        return Err("supply exactly one of --auto/--rect, FPS 1..120 and positive timeout; --search-rect requires --auto".into());
+        return Err("supply exactly one of --auto/--rect (or --git-apply without capture), FPS 1..120 and positive timeout; --search-rect requires --auto".into());
     }
-    o.output
-        .validate(o.preview.as_deref(), o.stats.as_deref())?;
+    if o.git.is_offline() {
+        if o.output.file.is_some() || explicit_directory || o.preview.is_some() || o.stats.is_some()
+        {
+            return Err("--git-apply uses an existing package; output/preview/stats options require capture".into());
+        }
+    } else {
+        if o.git.repo.is_some() {
+            o.output.git_default(explicit_directory)?;
+        }
+        o.output
+            .validate(o.preview.as_deref(), o.stats.as_deref())?;
+    }
     Ok(Some(o))
 }
 struct State {
+    git_session: Option<vft_git::ReceiveSession>,
+    transfer_finished: Option<Duration>,
+    complete: bool,
     options: Options,
     decoder: Decoder,
     start: Instant,
@@ -134,7 +152,9 @@ impl State {
             ),
             format!(
                 "Elapsed: {:.1}s   Requested processing FPS: {}",
-                self.start.elapsed().as_secs_f64(),
+                self.transfer_finished
+                    .unwrap_or_else(|| self.start.elapsed())
+                    .as_secs_f64(),
                 self.options.fps
             ),
         ];
@@ -148,7 +168,7 @@ impl State {
     }
     fn refresh_view(&self) {
         let mut v = self.shared.lock().unwrap();
-        v.state = if self.decoder.receiver.is_complete() {
+        v.state = if self.complete {
             Lifecycle::Complete
         } else {
             Lifecycle::Running
@@ -217,18 +237,36 @@ impl State {
                 .options
                 .output
                 .path()
-                .ok_or("missing resolved output path")?;
-            save_verified(&self.decoder.receiver, output)?;
+                .ok_or("missing resolved output path")?
+                .to_path_buf();
+            self.shared.lock().unwrap().state = Lifecycle::Verifying;
+            save_verified(&self.decoder.receiver, &output)?;
+            self.options.output.preserve_git_package();
+            self.transfer_finished = Some(self.start.elapsed());
+            let git_result = if let Some(session) = &self.git_session {
+                crate::git::apply(
+                    session,
+                    &output,
+                    self.options.max_file_size,
+                    (self.options.tui == Some(true)).then_some(&self.shared),
+                    Some(&self.stop),
+                )?
+            } else {
+                String::new()
+            };
+            self.complete = true;
             // Completion must replace the last throttled progress snapshot, including
             // recovered bytes, hash and incomplete groups. Keep the path in scrollable text.
             self.refresh_view();
             self.shared.lock().unwrap().result = format!(
-                "SHA-256 verified; output: {}. Q exits.",
-                vft_tui::safe_text(&output.display().to_string())
+                "SHA-256 verified; output: {}. {} Q exits.",
+                vft_tui::safe_text(&output.display().to_string()),
+                git_result
             );
             self.report(&format!(
-                "COMPLETE SHA-256 verified; output={}",
-                vft_tui::safe_text(&output.display().to_string())
+                "COMPLETE SHA-256 verified; output={}; {}",
+                vft_tui::safe_text(&output.display().to_string()),
+                git_result
             ));
             return Ok(true);
         }
@@ -254,7 +292,10 @@ impl State {
             .write(true)
             .create_new(true)
             .open(path)?;
-        let elapsed = self.start.elapsed().as_secs_f64();
+        let elapsed = self
+            .transfer_finished
+            .unwrap_or_else(|| self.start.elapsed())
+            .as_secs_f64();
         let bytes = if success {
             self.decoder.receiver.manifest().map_or(0, |m| m.file_size)
         } else {
@@ -282,8 +323,48 @@ fn receive(
     stop: Stop,
     commands: mpsc::Receiver<ReceiverCommand>,
 ) -> Result<()> {
+    let control = vft_git::Control {
+        cancel: stop.clone(),
+        ..Default::default()
+    };
+    let _interrupt = if options.git.repo.is_some() && options.tui != Some(true) {
+        Some(vft_git::InterruptGuard::install(stop.clone())?)
+    } else {
+        None
+    };
+    let git_session = options.git.open(&control)?;
+    if let Some(session) = &git_session {
+        let message = format!(
+            "Git receiving branch={} baseline={}",
+            session.branch, session.head
+        );
+        if options.tui == Some(true) {
+            shared.lock().unwrap().log(&message);
+        } else {
+            println!("{}", vft_tui::safe_text(&message));
+        }
+        if let Some(path) = options.git.apply_path() {
+            let result = crate::git::apply(
+                session,
+                path,
+                options.max_file_size,
+                (options.tui == Some(true)).then_some(&shared),
+                Some(&stop),
+            )?;
+            let mut view = shared.lock().unwrap();
+            view.state = Lifecycle::Complete;
+            view.result = result.clone();
+            if options.tui != Some(true) {
+                println!("COMPLETE {}", vft_tui::safe_text(&result));
+            }
+            return Ok(());
+        }
+    }
     let now = Instant::now();
     let mut state = State {
+        git_session,
+        transfer_finished: None,
+        complete: false,
         decoder: Decoder::new(
             options.profile,
             options.rect,
@@ -306,7 +387,7 @@ fn receive(
     );
     let result = capture::run(&mut state);
     // Preserve failed-run diagnostics; a stats error must not conceal the original capture failure.
-    if let Err(e) = state.stats(result.is_ok()) {
+    if let Err(e) = state.stats(state.transfer_finished.is_some()) {
         if result.is_ok() {
             return Err(e);
         }
@@ -444,6 +525,74 @@ mod tests {
 mod completion_tests {
     use super::*;
     #[test]
+    fn git_capture_completion_waits_for_application_and_preserves_failed_package() {
+        use crate::git_fixture::*;
+        for fail in [false, true] {
+            let (root, source, receiver, base) = fixture();
+            let target = advance(&source);
+            let package = package(&source, &base, &root.join("send.vftgit"));
+            let arguments = vec![
+                "--git-repo".into(),
+                receiver.to_string_lossy().into_owned(),
+                "--auto".into(),
+            ];
+            let mut options = options(&arguments).unwrap().unwrap();
+            options.tui = Some(true);
+            let session = options.git.open(&vft_git::Control::default()).unwrap();
+            if fail {
+                std::fs::write(receiver.join("text.txt"), b"preserve local work").unwrap();
+            }
+            let shared = Arc::new(Mutex::new(View::default()));
+            let (_, commands) = mpsc::sync_channel(32);
+            let now = Instant::now();
+            let mut state = State {
+                git_session: session,
+                transfer_finished: None,
+                complete: false,
+                decoder: Decoder::new(None, None, None, 1_000_000),
+                options,
+                start: now,
+                last_report: now,
+                captures: 0,
+                valid: 0,
+                preview_saved: false,
+                shared: shared.clone(),
+                stop: Arc::new(AtomicBool::new(false)),
+                commands,
+                page: 0,
+            };
+            let mut sender = vft_linux::open_sender(&package, ProfileId::Balanced).unwrap();
+            let mut result = Ok(false);
+            for _ in 0..100 {
+                result = state.tick(Some(sender.next_frame().unwrap().render(2).unwrap()));
+                if !matches!(result, Ok(false)) {
+                    break;
+                }
+            }
+            let saved = state.options.output.path().unwrap().to_path_buf();
+            assert!(state.decoder.receiver.is_complete());
+            assert!(state.transfer_finished.is_some());
+            assert_eq!(
+                std::fs::read(&saved).unwrap(),
+                std::fs::read(package).unwrap()
+            );
+            if fail {
+                assert!(result.is_err());
+                assert!(!state.complete);
+                assert_eq!(shared.lock().unwrap().state, Lifecycle::Failed);
+                assert_eq!(git(&receiver, &["rev-parse", "HEAD"]), base);
+            } else {
+                assert!(result.unwrap());
+                assert!(state.complete);
+                assert_eq!(shared.lock().unwrap().state, Lifecycle::Complete);
+                assert_eq!(git(&receiver, &["rev-parse", "HEAD"]), target);
+            }
+            drop(state);
+            assert!(saved.is_file());
+        }
+    }
+
+    #[test]
     fn completion_publishes_verified_bytes_hash_groups_and_output_without_waiting_for_timer() {
         completion(false, false);
     }
@@ -496,6 +645,9 @@ mod completion_tests {
         let (_, commands) = mpsc::sync_channel(32);
         let now = Instant::now();
         let mut state = State {
+            git_session: None,
+            transfer_finished: None,
+            complete: false,
             options,
             decoder: Decoder::new(None, None, None, 1000),
             start: now,
@@ -555,5 +707,57 @@ mod completion_tests {
             Sha256::digest(std::fs::read(output).unwrap()),
             Sha256::digest([9; 100])
         );
+    }
+}
+
+#[cfg(test)]
+mod git_option_tests {
+    use super::*;
+    #[test]
+    fn git_capture_output_priority_and_offline_mode() {
+        let parse = |args: &[&str]| options(&args.iter().map(|v| (*v).into()).collect::<Vec<_>>());
+        let auto = parse(&["--git", "--auto"]).unwrap().unwrap();
+        assert_eq!(
+            auto.output.file.as_ref().unwrap().file_name().unwrap(),
+            "received.vftgit"
+        );
+        let dir = crate::output::test_directory();
+        let file = dir.join("chosen.vftgit");
+        let missing = dir.join("unused-missing");
+        let mut directory = parse(&["--git", "--auto", "--output-dir", dir.to_str().unwrap()])
+            .unwrap()
+            .unwrap();
+        assert!(directory.output.file.is_none());
+        assert_eq!(
+            directory
+                .output
+                .resolve("original.vftgit", None, None)
+                .unwrap(),
+            dir.join("original.vftgit")
+        );
+        let explicit = parse(&[
+            "--git",
+            "--auto",
+            "--output-dir",
+            missing.to_str().unwrap(),
+            "--output",
+            file.to_str().unwrap(),
+        ])
+        .unwrap()
+        .unwrap();
+        assert_eq!(explicit.output.file.as_deref(), Some(file.as_path()));
+        let offline = parse(&["--git", "--git-apply", "existing.vftgit"])
+            .unwrap()
+            .unwrap();
+        assert!(offline.git.is_offline());
+        assert!(offline.output.file.is_none());
+        for args in [
+            vec!["--git", "--git-apply", "existing", "--auto"],
+            vec!["--git", "--git-apply", "existing", "--output-dir", "."],
+            vec!["--git"],
+            vec!["--git-apply", "existing"],
+        ] {
+            assert!(parse(&args).is_err());
+        }
     }
 }

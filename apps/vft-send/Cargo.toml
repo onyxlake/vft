@@ -9,6 +9,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+vft-git = { path = "../vft-git" }
 vft-protocol.workspace = true
 vft-sender.workspace = true
 vft-visual.workspace = true

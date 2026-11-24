@@ -101,7 +101,10 @@ impl Editor {
 pub enum Lifecycle {
     #[default]
     Starting,
+    Packing,
     Running,
+    Verifying,
+    Applying,
     Paused,
     Stopping,
     Complete,
